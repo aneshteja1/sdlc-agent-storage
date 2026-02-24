@@ -499,7 +499,7 @@ let currentFiles = {};
 let stats = { sessions: 0, files: 0, heals: 0, saves: 0 };
 let history = JSON.parse(localStorage.getItem('sdlc_history') || '[]');
 let apiKeys = JSON.parse(localStorage.getItem('sdlc_keys') || '{}');
-const BACKEND_URL = 'wss://mrbody-sdlc-agent-backend.hf.space/ws';  ← Update with your HF Spaces URL
+const BACKEND_URL = 'wss://mrbody-sdlc-agent-backend.hf.space/ws';     ## ← Update with your HF Spaces URL
 
 // ── INIT ──────────────────────────────────────────────────────────────────
 window.addEventListener('load', () => {
