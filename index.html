@@ -82,6 +82,24 @@ body{background:var(--bg);color:var(--text);font-family:'Outfit',sans-serif;heig
 .wt-body{font-size:11px;color:var(--text2);line-height:1.55;}
 .wt-close{float:right;background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;margin-left:8px;}
 
+/* ── SWITCHOVER POPUP (shown when one LLM hits critical, switching to next) ── */
+#switch-popup{display:none;position:fixed;top:24px;left:50%;transform:translateX(-50%);z-index:8500;
+  background:var(--surface);border:1px solid var(--accent);border-radius:16px;
+  padding:18px 24px;min-width:380px;max-width:94vw;box-shadow:var(--shadow);}
+#switch-popup.show{display:flex;align-items:flex-start;gap:14px;animation:toastIn .35s ease;}
+.sw-icon{font-size:28px;flex-shrink:0;}
+.sw-body{flex:1;}
+.sw-title{font-size:13px;font-weight:700;color:var(--accent);margin-bottom:4px;}
+.sw-msg{font-size:11px;color:var(--text2);line-height:1.6;}
+.sw-chain{display:flex;align-items:center;gap:6px;margin-top:8px;flex-wrap:wrap;}
+.sw-node{padding:3px 10px;border-radius:20px;font-size:10px;font-weight:700;font-family:'JetBrains Mono',monospace;}
+.sw-node.dead{background:rgba(var(--rRgb),.15);color:var(--red);border:1px solid rgba(var(--rRgb),.3);text-decoration:line-through;}
+.sw-node.active{background:rgba(var(--gRgb),.15);color:var(--green);border:1px solid rgba(var(--gRgb),.4);}
+.sw-node.idle{background:var(--s2);color:var(--muted);border:1px solid var(--border);}
+.sw-arrow{color:var(--muted);font-size:12px;}
+.sw-close{background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;padding:0;margin-left:8px;flex-shrink:0;}
+.sw-close:hover{color:var(--text);}
+
 /* ── BLOCKED OVERLAY ── */
 #blocked-overlay{display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.92);backdrop-filter:blur(12px);align-items:center;justify-content:center;}
 #blocked-overlay.show{display:flex;}
@@ -367,23 +385,28 @@ body{background:var(--bg);color:var(--text);font-family:'Outfit',sans-serif;heig
 </head>
 <body>
 
-<!-- OFFLINE BANNER -->
 <div id="offline-banner">⚠ No internet connection — reconnecting…</div>
 
-<!-- RECONNECT BANNER -->
 <div id="reconnect-banner" style="display:none">⟳ Connecting to backend… <span id="rb-link"></span>&nbsp;<button onclick="connectWebSocket()" style="background:var(--yellow);color:#000;border:none;padding:2px 10px;border-radius:4px;cursor:pointer;font-size:10px;font-weight:700;font-family:inherit">Retry Now</button></div>
 
-<!-- APP TOAST -->
 <div id="app-toast"><span id="app-toast-msg"></span><button class="toast-close" onclick="hideAppToast()">✕</button></div>
 
-<!-- WARN TOAST -->
 <div id="warn-toast">
   <button class="wt-close" onclick="document.getElementById('warn-toast').classList.remove('show')">✕</button>
   <div class="wt-title">⚠️ Approaching Limit</div>
   <div class="wt-body" id="warn-body">Usage nearing daily limit.</div>
 </div>
 
-<!-- BLOCKED OVERLAY -->
+<div id="switch-popup">
+  <span class="sw-icon" id="sw-icon">🔄</span>
+  <div class="sw-body">
+    <div class="sw-title" id="sw-title">Switching LLM…</div>
+    <div class="sw-msg" id="sw-msg"></div>
+    <div class="sw-chain" id="sw-chain"></div>
+  </div>
+  <button class="sw-close" onclick="document.getElementById('switch-popup').classList.remove('show')">✕</button>
+</div>
+
 <div id="blocked-overlay">
   <div class="bl-box">
     <span class="bl-icon">🚫</span>
@@ -392,6 +415,8 @@ body{background:var(--bg);color:var(--text);font-family:'Outfit',sans-serif;heig
     <div class="bl-bars">
       <div class="bl-row"><span class="bl-rname">Groq</span><div class="bl-rtrack"><div class="bl-rfill" id="blf-groq"></div></div><span class="bl-rpct" id="blp-groq">0%</span></div>
       <div class="bl-row"><span class="bl-rname">Cerebras</span><div class="bl-rtrack"><div class="bl-rfill" id="blf-cerebras"></div></div><span class="bl-rpct" id="blp-cerebras">0%</span></div>
+      <div class="bl-row"><span class="bl-rname">Gemini</span><div class="bl-rtrack"><div class="bl-rfill" id="blf-gemini"></div></div><span class="bl-rpct" id="blp-gemini">0%</span></div>
+      <div class="bl-row"><span class="bl-rname">OpenRouter</span><div class="bl-rtrack"><div class="bl-rfill" id="blf-openrouter"></div></div><span class="bl-rpct" id="blp-openrouter">0%</span></div>
       <div class="bl-row"><span class="bl-rname">Mistral</span><div class="bl-rtrack"><div class="bl-rfill" id="blf-mistral"></div></div><span class="bl-rpct" id="blp-mistral">0%</span></div>
       <div class="bl-row"><span class="bl-rname">GitHub</span><div class="bl-rtrack"><div class="bl-rfill" id="blf-github"></div></div><span class="bl-rpct" id="blp-github">0%</span></div>
       <div class="bl-row"><span class="bl-rname">Judge0</span><div class="bl-rtrack"><div class="bl-rfill" id="blf-judge0"></div></div><span class="bl-rpct" id="blp-judge0">0%</span></div>
@@ -401,18 +426,16 @@ body{background:var(--bg);color:var(--text);font-family:'Outfit',sans-serif;heig
   </div>
 </div>
 
-<!-- API KEYS MODAL -->
 <div id="keys-modal">
   <div class="km-box">
     <div class="km-hdr">
       <div>
         <div class="km-title">API Keys</div>
-        <div class="km-sub">Stored locally · Never sent to any server except your own HuggingFace backend</div>
+        <div class="km-sub">Connect your agent to its backend</div>
       </div>
       <button class="km-close" onclick="closeModal()">✕</button>
     </div>
     <div class="km-form">
-      <!-- ★ BACKEND URL — most important, shown first -->
       <div class="km-grp" style="border:2px solid var(--accent);border-radius:10px;padding:12px;background:rgba(var(--aRgb),.07)">
         <label style="color:var(--accent);font-size:11px">🔗 HUGGINGFACE BACKEND URL <span style="color:var(--red)">· Required first</span></label>
         <div class="km-row">
@@ -424,49 +447,18 @@ body{background:var(--bg);color:var(--text);font-family:'Outfit',sans-serif;heig
         <div class="km-hint">Get from: huggingface.co/spaces → your Space → copy URL → replace https:// with wss:// → add /ws at end</div>
         <div class="km-status" id="status-backend-url"></div>
       </div>
-      <div class="km-grp">
-        <label>Groq API Key <span style="color:var(--green)">· 14,400 req/day</span></label>
-        <div class="km-row"><input class="km-input" id="key-groq" type="password" placeholder="gsk_…"/><button class="km-btn" onclick="validateKey('groq')">Test</button></div>
-        <div class="km-hint">console.groq.com · Llama + DeepSeek-R1 planning & healing</div>
-        <div class="km-status" id="status-groq"></div>
+      
+      <div style="background:rgba(var(--gRgb),.07);border:1px solid rgba(var(--gRgb),.25);border-radius:10px;padding:12px;">
+        <div style="font-size:11px;font-weight:700;color:var(--green);margin-bottom:6px;">🔒 All API Keys Secured in Backend</div>
+        <div style="font-size:11px;color:var(--text2);line-height:1.7;">Groq, Cerebras, Mistral, Judge0, and <strong>GitHub</strong> keys are now securely locked inside your HuggingFace Space Environment Variables.<br>You never need to paste them here. They are completely safe and invisible to users.</div>
       </div>
-      <div class="km-grp">
-        <label>Cerebras API Key <span style="color:var(--green)">· 1M tokens/day</span></label>
-        <div class="km-row"><input class="km-input" id="key-cerebras" type="password" placeholder="csk-…"/><button class="km-btn" onclick="validateKey('cerebras')">Test</button></div>
-        <div class="km-hint">cloud.cerebras.ai · Qwen3-235B frontend & Q&A</div>
-        <div class="km-status" id="status-cerebras"></div>
-      </div>
-      <div class="km-grp">
-        <label>Mistral API Key <span style="color:var(--green)">· 2,000 req/day</span></label>
-        <div class="km-row"><input class="km-input" id="key-mistral" type="password" placeholder="…"/><button class="km-btn" onclick="validateKey('mistral')">Test</button></div>
-        <div class="km-hint">console.mistral.ai · Codestral for test writing</div>
-        <div class="km-status" id="status-mistral"></div>
-      </div>
-      <div class="km-grp">
-        <label>GitHub Token (Fine-grained PAT) <span style="color:var(--green)">· 5,000 calls/hr</span></label>
-        <div class="km-row"><input class="km-input" id="key-github" type="password" placeholder="github_pat_…"/><button class="km-btn" onclick="validateKey('github')">Test</button></div>
-        <div class="km-hint">github.com → Settings → Developer Settings → Fine-grained tokens → Generate · Needs <strong>Contents: Read &amp; Write</strong></div>
-        <div class="km-status" id="status-github"></div>
-      </div>
-      <div class="km-grp">
-        <label>GitHub Repo <span style="color:var(--muted)">· where sessions are saved</span></label>
-        <input class="km-input" id="key-github-repo" type="text" placeholder="https://github.com/username/sdlc-agent-storage"/>
-        <div class="km-hint">Paste the full GitHub repo URL · Files saved under users/{user_id}/sessions/</div>
-      </div>
-      <div class="km-grp">
-        <label>Judge0 RapidAPI Key <span style="color:var(--green)">· 100 req/day</span></label>
-        <div class="km-row"><input class="km-input" id="key-judge0" type="password" placeholder="…"/><button class="km-btn" onclick="validateKey('judge0')">Test</button></div>
-        <div class="km-hint">rapidapi.com · Runs generated tests in sandbox</div>
-        <div class="km-status" id="status-judge0"></div>
-      </div>
-
-      <button class="km-save" onclick="saveKeys()">💾 Save All Keys</button>
-      <div class="km-footer">🔒 Keys stored in localStorage · Never uploaded anywhere except your own backend</div>
+      
+      <button class="km-save" onclick="saveKeys()">💾 Save URL & Connect</button>
+      <div class="km-footer">🔒 URL stored locally in browser</div>
     </div>
   </div>
 </div>
 
-<!-- COMMAND PALETTE — fullscreen overlay so clicking outside closes it -->
 <div id="cmd-palette" onclick="if(event.target===this)closeCmd()">
   <div class="cmd-box">
     <div class="cmd-top">
@@ -478,7 +470,6 @@ body{background:var(--bg);color:var(--text);font-family:'Outfit',sans-serif;heig
   </div>
 </div>
 
-<!-- NAV -->
 <nav class="nav">
   <div class="logo">
     <div class="logo-dot" id="conn-dot"></div>
@@ -506,10 +497,8 @@ body{background:var(--bg);color:var(--text);font-family:'Outfit',sans-serif;heig
   </div>
 </nav>
 
-<!-- USAGE STRIP with SVG donuts -->
 <div id="usage-strip">
   <span class="us-label">Usage</span>
-  <!-- Groq -->
   <div class="us-pill" title="Groq · live from API headers">
     <span class="us-name">GROQ</span>
     <div class="us-donut">
@@ -517,7 +506,6 @@ body{background:var(--bg);color:var(--text);font-family:'Outfit',sans-serif;heig
     </div>
     <span class="us-pct" id="upct-groq" style="color:var(--green)">0%</span>
   </div>
-  <!-- Cerebras -->
   <div class="us-pill" title="Cerebras · live from API headers">
     <span class="us-name">CEREBRAS</span>
     <div class="us-donut">
@@ -525,7 +513,6 @@ body{background:var(--bg);color:var(--text);font-family:'Outfit',sans-serif;heig
     </div>
     <span class="us-pct" id="upct-cerebras" style="color:var(--green)">0%</span>
   </div>
-  <!-- Mistral -->
   <div class="us-pill" title="Mistral · live from API headers">
     <span class="us-name">MISTRAL</span>
     <div class="us-donut">
@@ -533,7 +520,6 @@ body{background:var(--bg);color:var(--text);font-family:'Outfit',sans-serif;heig
     </div>
     <span class="us-pct" id="upct-mistral" style="color:var(--green)">0%</span>
   </div>
-  <!-- GitHub -->
   <div class="us-pill" title="GitHub · polled from API">
     <span class="us-name">GITHUB</span>
     <div class="us-donut">
@@ -541,7 +527,6 @@ body{background:var(--bg);color:var(--text);font-family:'Outfit',sans-serif;heig
     </div>
     <span class="us-pct" id="upct-github" style="color:var(--green)">0%</span>
   </div>
-  <!-- Judge0 -->
   <div class="us-pill" title="Judge0 · 100 req/day">
     <span class="us-name">JUDGE0</span>
     <div class="us-donut">
@@ -549,13 +534,25 @@ body{background:var(--bg);color:var(--text);font-family:'Outfit',sans-serif;heig
     </div>
     <span class="us-pct" id="upct-judge0" style="color:var(--green)">0%</span>
   </div>
-  <span style="margin-left:auto;font-size:9px;color:var(--muted);font-family:'JetBrains Mono',monospace;">⚠️ 80% · 🚫 96%</span>
+  <div class="us-pill" title="Gemini 2.5 Flash · 1B tokens/month free · Fallback 2">
+    <span class="us-name">GEMINI</span>
+    <div class="us-donut">
+      <svg viewBox="0 0 26 26" width="26" height="26"><circle class="us-donut-track" cx="13" cy="13" r="10"/><circle class="us-donut-fill" id="dring-gemini" cx="13" cy="13" r="10" stroke="var(--green)" stroke-dasharray="62.8" stroke-dashoffset="62.8"/></svg>
+    </div>
+    <span class="us-pct" id="upct-gemini" style="color:var(--green)">0%</span>
+  </div>
+  <div class="us-pill" title="OpenRouter free models · Fallback 3 (last resort)">
+    <span class="us-name">OPENROUTER</span>
+    <div class="us-donut">
+      <svg viewBox="0 0 26 26" width="26" height="26"><circle class="us-donut-track" cx="13" cy="13" r="10"/><circle class="us-donut-fill" id="dring-openrouter" cx="13" cy="13" r="10" stroke="var(--green)" stroke-dasharray="62.8" stroke-dashoffset="62.8"/></svg>
+    </div>
+    <span class="us-pct" id="upct-openrouter" style="color:var(--green)">0%</span>
+  </div>
+  <span style="margin-left:auto;font-size:9px;color:var(--muted);font-family:'JetBrains Mono',monospace;">⚠️ 80% warn · 🔄 96% switch · 🚫 all dead = stop</span>
 </div>
 
-<!-- MAIN 2-COLUMN LAYOUT -->
 <div class="layout" id="layout">
 
-  <!-- LEFT SIDEBAR -->
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-top">
       <span class="sidebar-top-title">SDLC Agent</span>
@@ -563,24 +560,20 @@ body{background:var(--bg);color:var(--text);font-family:'Outfit',sans-serif;heig
     </div>
     <div class="sidebar-body" id="sidebar-body">
 
-      <!-- History search -->
       <div class="hsearch-wrap">
         <input class="hsearch" id="hsearch" placeholder="🔍 Search history…" oninput="filterHistory(this.value)"/>
       </div>
 
-      <!-- Pinned section -->
       <div id="pinned-section" style="display:none">
         <div class="h-section">📌 Pinned</div>
         <div id="pinned-list"></div>
       </div>
 
-      <!-- History -->
       <div class="h-section">History</div>
       <div id="history-list">
         <div style="padding:12px;color:var(--muted);font-size:11px;text-align:center;font-family:'JetBrains Mono',monospace;">Start chatting…</div>
       </div>
 
-      <!-- FILES accordion -->
       <div class="acc-section">
         <div class="acc-hdr" onclick="toggleAcc(this)">
           <span class="acc-icon">📁</span> Files
@@ -592,7 +585,6 @@ body{background:var(--bg);color:var(--text);font-family:'Outfit',sans-serif;heig
         </div>
       </div>
 
-      <!-- USAGE accordion -->
       <div class="acc-section">
         <div class="acc-hdr" onclick="toggleAcc(this)">
           <span class="acc-icon">📊</span> API Usage
@@ -601,14 +593,15 @@ body{background:var(--bg);color:var(--text);font-family:'Outfit',sans-serif;heig
         <div class="acc-body">
           <div id="sb-usage-groq" class="su-card"><div class="su-top"><span class="su-name">🟣 Groq</span><span class="su-pct" id="su-pct-groq" style="color:var(--green)">0%</span></div><div class="su-track"><div class="su-fill" id="su-fill-groq" style="width:0%;background:var(--green)"></div></div><div class="su-detail"><span id="su-val-groq">0 / 14,400 req</span><span class="su-live" id="su-live-groq"></span></div></div>
           <div id="sb-usage-cerebras" class="su-card"><div class="su-top"><span class="su-name">🔵 Cerebras</span><span class="su-pct" id="su-pct-cerebras" style="color:var(--green)">0%</span></div><div class="su-track"><div class="su-fill" id="su-fill-cerebras" style="width:0%;background:var(--green)"></div></div><div class="su-detail"><span id="su-val-cerebras">0 / 1,000,000 tok</span><span class="su-live" id="su-live-cerebras"></span></div></div>
+          <div id="sb-usage-gemini" class="su-card"><div class="su-top"><span class="su-name">🟢 Gemini</span><span class="su-pct" id="su-pct-gemini" style="color:var(--green)">0%</span></div><div class="su-track"><div class="su-fill" id="su-fill-gemini" style="width:0%;background:var(--green)"></div></div><div class="su-detail"><span id="su-val-gemini">0 / 1,000,000,000 tok</span><span class="su-live" id="su-live-gemini"></span></div></div>
+          <div id="sb-usage-openrouter" class="su-card"><div class="su-top"><span class="su-name">🟡 OpenRouter</span><span class="su-pct" id="su-pct-openrouter" style="color:var(--green)">0%</span></div><div class="su-track"><div class="su-fill" id="su-fill-openrouter" style="width:0%;background:var(--green)"></div></div><div class="su-detail"><span id="su-val-openrouter">0 / 50 req</span><span class="su-live" id="su-live-openrouter"></span></div></div>
           <div id="sb-usage-mistral" class="su-card"><div class="su-top"><span class="su-name">🟠 Mistral</span><span class="su-pct" id="su-pct-mistral" style="color:var(--green)">0%</span></div><div class="su-track"><div class="su-fill" id="su-fill-mistral" style="width:0%;background:var(--green)"></div></div><div class="su-detail"><span id="su-val-mistral">0 / 2,000 req</span><span class="su-live" id="su-live-mistral"></span></div></div>
           <div id="sb-usage-github" class="su-card"><div class="su-top"><span class="su-name">⚫ GitHub</span><span class="su-pct" id="su-pct-github" style="color:var(--green)">0%</span></div><div class="su-track"><div class="su-fill" id="su-fill-github" style="width:0%;background:var(--green)"></div></div><div class="su-detail"><span id="su-val-github">0 / 5,000 calls</span><span class="su-live" id="su-live-github"></span></div></div>
           <div id="sb-usage-judge0" class="su-card"><div class="su-top"><span class="su-name">🟤 Judge0</span><span class="su-pct" id="su-pct-judge0" style="color:var(--green)">0%</span></div><div class="su-track"><div class="su-fill" id="su-fill-judge0" style="width:0%;background:var(--green)"></div></div><div class="su-detail"><span id="su-val-judge0">0 / 100 req</span><span class="su-live" id="su-live-judge0"></span></div></div>
-          <div style="font-size:9px;color:var(--muted);text-align:center;margin-top:6px;font-family:'JetBrains Mono',monospace;line-height:1.7;">Limits auto-update from live API headers<br>Total cost: <strong style="color:var(--green)">₹0/month</strong></div>
+          <div style="font-size:9px;color:var(--muted);text-align:center;margin-top:6px;font-family:'JetBrains Mono',monospace;line-height:1.7;">🔄 Auto-switches: Groq→Cerebras→Gemini→OpenRouter<br>🚫 Hard stop only when ALL 4 are exhausted<br>Total cost: <strong style="color:var(--green)">₹0/month</strong></div>
         </div>
       </div>
 
-      <!-- STATS accordion -->
       <div class="acc-section">
         <div class="acc-hdr" onclick="toggleAcc(this)">
           <span class="acc-icon">🏆</span> Stats
@@ -624,11 +617,9 @@ body{background:var(--bg);color:var(--text);font-family:'Outfit',sans-serif;heig
         </div>
       </div>
 
-    </div><!-- end sidebar-body -->
-    <button class="new-session-btn" onclick="newSession()">＋ New Session</button>
+    </div><button class="new-session-btn" onclick="newSession()">＋ New Session</button>
   </aside>
 
-  <!-- CHAT CENTER -->
   <section class="chat" id="chat-section" style="position:relative">
     <div class="messages" id="messages">
       <div class="welcome" id="welcome">
@@ -637,24 +628,10 @@ body{background:var(--bg);color:var(--text);font-family:'Outfit',sans-serif;heig
         <div class="welcome-user" id="welcome-user"></div>
         <h1>SDLC <em>Agent</em></h1>
         <p>Build full-stack apps, search the web, write & run tests, auto-fix broken code — all saved to GitHub automatically.</p>
-        <div class="suggestions">
-          <button class="sug" onclick="suggest('Build a React todo app with FastAPI backend and full tests')">
-            <div class="sug-icon">🏗️</div><div class="sug-title">Full-stack todo app</div><div class="sug-sub">React + FastAPI + auto-tested</div>
-          </button>
-          <button class="sug" onclick="suggest('What are the best free LLM APIs available right now?')">
-            <div class="sug-icon">🌐</div><div class="sug-title">Web search</div><div class="sug-sub">Live info with sources</div>
-          </button>
-          <button class="sug" onclick="suggest('Create a FastAPI REST API with JWT authentication')">
-            <div class="sug-icon">⚙️</div><div class="sug-title">Backend API</div><div class="sug-sub">FastAPI + auth + tests</div>
-          </button>
-          <button class="sug" onclick="suggest('Build a React analytics dashboard with recharts')">
-            <div class="sug-icon">🎨</div><div class="sug-title">React dashboard</div><div class="sug-sub">Charts, dark UI, responsive</div>
-          </button>
-        </div>
+
       </div>
     </div>
 
-    <!-- Scroll pin -->
     <button id="scroll-pin" class="pinned" onclick="toggleAutoScroll()" title="Auto-scroll" style="display:none">📍</button>
 
     <div class="input-area">
@@ -672,9 +649,7 @@ body{background:var(--bg);color:var(--text);font-family:'Outfit',sans-serif;heig
     </div>
   </section>
 
-</div><!-- end layout -->
-
-<script>
+</div><script>
 'use strict';
 // ═══════════════════════════════════════════════════════════════
 //  SAFE STORAGE — handles private/incognito mode gracefully
@@ -725,19 +700,86 @@ function toggleTheme() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  LIVE RATE LIMITS — defaults overwritten by live API headers
-//  Backend sends msg.rate_limits on every response
-//  GitHub polled directly from frontend using saved token
+//  SMART FALLBACK SYSTEM
+//
+//  FALLBACK CHAIN (LLM priority order):
+//    1. Groq       — Primary   (14,400 req/day)
+//    2. Cerebras   — Fallback1 (1M tokens/day)
+//    3. Gemini     — Fallback2 (1B tokens/month)
+//    4. OpenRouter — Fallback3 (free models pool)
+//    ❌ ALL CRITICAL → Hard stop, nothing works
+//
+//  TRIGGERS per service:
+//    80% WARNING  → Yellow toast "X at 80% — auto-switches at 96%"
+//    96% CRITICAL → Blue popup "X maxed — switching to Y now" + KEEP WORKING
+//    ALL 96%      → Red full-screen block — hard stop
 // ═══════════════════════════════════════════════════════════════
+
+// LLM fallback chain — order matters
+var LLM_CHAIN = ['groq', 'cerebras', 'gemini', 'openrouter'];
+
 var LIMITS = store.get('live_limits', {
-  groq:     { total: 14400,   unit: 'req', label: 'Groq',     WARN: 0.80, CRIT: 0.96, live: false },
-  cerebras: { total: 1000000, unit: 'tok', label: 'Cerebras', WARN: 0.80, CRIT: 0.96, live: false },
-  mistral:  { total: 2000,    unit: 'req', label: 'Mistral',  WARN: 0.80, CRIT: 0.96, live: false },
-  github:   { total: 5000,    unit: 'calls', label: 'GitHub', WARN: 0.80, CRIT: 0.96, live: false },
-  judge0:   { total: 100,     unit: 'req', label: 'Judge0',   WARN: 0.80, CRIT: 0.96, live: false }
+  groq:       { total: 14400,      unit: 'req',   label: 'Groq',       WARN: 0.80, CRIT: 0.96, live: false, color: '#a78bfa' },
+  cerebras:   { total: 1000000,    unit: 'tok',   label: 'Cerebras',   WARN: 0.80, CRIT: 0.96, live: false, color: '#4f91f5' },
+  gemini:     { total: 1000000000, unit: 'tok',   label: 'Gemini',     WARN: 0.80, CRIT: 0.96, live: false, color: '#34d878' },
+  openrouter: { total: 50,         unit: 'req',   label: 'OpenRouter', WARN: 0.80, CRIT: 0.96, live: false, color: '#f5a623' },
+  mistral:    { total: 2000,       unit: 'req',   label: 'Mistral',    WARN: 0.80, CRIT: 0.96, live: false, color: '#f85149' },
+  github:     { total: 5000,       unit: 'calls', label: 'GitHub',     WARN: 0.80, CRIT: 0.96, live: false, color: '#c9d8f0' },
+  judge0:     { total: 100,        unit: 'req',   label: 'Judge0',     WARN: 0.80, CRIT: 0.96, live: false, color: '#f5a623' }
 });
 
-// Called when backend sends live rate limit headers
+// Ensure saved limits have new fields (gemini/openrouter) if upgrading from old version
+if (!LIMITS.gemini)     LIMITS.gemini     = { total:1000000000, unit:'tok',   label:'Gemini',     WARN:0.80, CRIT:0.96, live:false, color:'#34d878' };
+if (!LIMITS.openrouter) LIMITS.openrouter = { total:50,         unit:'req',   label:'OpenRouter', WARN:0.80, CRIT:0.96, live:false, color:'#f5a623' };
+
+// Track which services already triggered a warning/critical this session (avoid repeated popups)
+var _warnedSvcs = {};
+var _critSvcs   = {};
+
+// ── ACTIVE LLM TRACKING ──────────────────────────────────────
+// Which LLM the backend is currently using — updated via msg.active_llm
+var activeLlm = store.get('active_llm', 'groq');
+
+function getActiveLlm() { return activeLlm; }
+
+function setActiveLlm(llm) {
+  activeLlm = llm;
+  store.set('active_llm', llm);
+  // Update nav chips to highlight active
+  LLM_CHAIN.forEach(function(svc) {
+    setEl('chip-' + svc, function(e) {
+      if (svc === llm) {
+        e.style.boxShadow = '0 0 8px rgba(var(--gRgb),.5)';
+        e.style.fontWeight = '800';
+      } else {
+        e.style.boxShadow = '';
+        e.style.fontWeight = '';
+      }
+    });
+  });
+}
+
+// ── FALLBACK LOGIC ───────────────────────────────────────────
+// Returns next available LLM in chain after `current`, or null if all dead
+function getNextLlm(current) {
+  var idx = LLM_CHAIN.indexOf(current);
+  for (var i = idx + 1; i < LLM_CHAIN.length; i++) {
+    var svc = LLM_CHAIN[i];
+    var pct = (usage[svc]||0) / (LIMITS[svc]||{total:1}).total;
+    if (pct < (LIMITS[svc]||{CRIT:0.96}).CRIT) return svc;
+  }
+  return null; // all exhausted
+}
+
+// Are ALL LLMs in chain critical?
+function allLlmsDead() {
+  return LLM_CHAIN.every(function(svc) {
+    var lim = LIMITS[svc]; if (!lim) return false;
+    return (usage[svc]||0) / lim.total >= lim.CRIT;
+  });
+}
+
+// ── LIVE RATE LIMITS from backend API headers ────────────────
 function updateLiveLimits(rl) {
   var changed = false;
   Object.keys(rl).forEach(function(svc) {
@@ -745,152 +787,186 @@ function updateLiveLimits(rl) {
     var d = rl[svc];
     if (d.total && d.total !== LIMITS[svc].total) {
       LIMITS[svc].total = d.total;
-      LIMITS[svc].live = true;
+      LIMITS[svc].live  = true;
       changed = true;
     }
-    // Update remaining usage directly from server
-    if (d.used !== undefined) {
-      usage[svc] = d.used;
-    }
+    if (d.used !== undefined) usage[svc] = d.used;
   });
-  if (changed) {
-    store.set('live_limits', LIMITS);
-    showAppToast('Limits updated from live API headers', 'info');
-  }
+  if (changed) store.set('live_limits', LIMITS);
+  // Update active LLM if backend reports it
+  if (rl.active_llm) setActiveLlm(rl.active_llm);
   var badge = document.getElementById('limits-live-badge');
   if (badge) badge.style.display = Object.values(LIMITS).some(function(l){ return l.live; }) ? '' : 'none';
   refreshUsageUI();
 }
 
-// Poll GitHub rate limit directly (frontend can do this with CORS-friendly endpoint)
-function getGithubAuthHeader(key) {
-  // Fine-grained PATs (github_pat_) need Bearer, classic (ghp_) use token
-  if (!key) return '';
-  return key.startsWith('github_pat_') ? 'Bearer ' + key : 'token ' + key;
-}
-
-function pollGitHubLimits() {
-  var keys = getApiKeys();
-  if (!keys.github) return;
-  var authHeader = getGithubAuthHeader(keys.github);
-  fetch('https://api.github.com/rate_limit', {
-    headers: { 'Authorization': authHeader, 'Accept': 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' }
-  }).then(function(r) { return r.json(); }).then(function(d) {
-    if (d.rate) {
-      LIMITS.github.total = d.rate.limit;
-      LIMITS.github.live = true;
-      usage.github = d.rate.limit - d.rate.remaining;
-      store.set('live_limits', LIMITS);
-      refreshUsageUI();
-    }
-  }).catch(function(){});
-}
-
 // ── USAGE STATE ──────────────────────────────────────────────
 var TODAY = new Date().toDateString();
-var usage = store.get('usage_' + TODAY, { date: TODAY, groq:0, cerebras:0, mistral:0, github:0, judge0:0 });
-if (usage.date !== TODAY) usage = { date: TODAY, groq:0, cerebras:0, mistral:0, github:0, judge0:0 };
+var usage = store.get('usage_' + TODAY, { date:TODAY, groq:0, cerebras:0, gemini:0, openrouter:0, mistral:0, github:0, judge0:0 });
+if (usage.date !== TODAY) usage = { date:TODAY, groq:0, cerebras:0, gemini:0, openrouter:0, mistral:0, github:0, judge0:0 };
 
 function saveUsage() { store.set('usage_' + TODAY, usage); }
 
-function isBlocked() {
-  return Object.keys(LIMITS).some(function(s) {
-    return (usage[s]||0) / LIMITS[s].total >= LIMITS[s].CRIT;
-  });
-}
+// Blocked = ALL LLMs in chain are critical (not just one)
+function isBlocked() { return allLlmsDead(); }
 
-// Single source of truth — called ONLY from msg.usage (server-reported) or GitHub poll
-// NO hardcoded trackUsage calls in switch cases
+// ── MASTER TRACK FUNCTION ────────────────────────────────────
+// Called ONLY from msg.usage (server-reported). No hardcoded calls anywhere.
 function trackUsage(svc, amount) {
   if (!LIMITS[svc]) return;
   usage[svc] = (usage[svc]||0) + amount;
   saveUsage();
   refreshUsageUI();
+
   var pct = usage[svc] / LIMITS[svc].total;
-  if (pct >= LIMITS[svc].CRIT) showBlocked(svc);
-  else if (pct >= LIMITS[svc].WARN) showWarnToast(svc, pct);
+
+  // ── CRITICAL: try to switch to next LLM ──────────────────
+  if (pct >= LIMITS[svc].CRIT && !_critSvcs[svc]) {
+    _critSvcs[svc] = true;
+    var next = getNextLlm(svc);
+    if (next) {
+      // Still have a fallback — show switchover popup, DO NOT block
+      showSwitchoverPopup(svc, next);
+      setActiveLlm(next);
+      // Tell backend to switch via next message (flag sent in sendMessage payload)
+    } else {
+      // No more fallbacks — hard block
+      showHardBlock();
+    }
+    return;
+  }
+
+  // ── WARNING: approaching limit ────────────────────────────
+  if (pct >= LIMITS[svc].WARN && !_warnedSvcs[svc]) {
+    _warnedSvcs[svc] = true;
+    var next2 = getNextLlm(svc);
+    showWarnToast(svc, pct, next2);
+  }
 }
 
-function refreshUsageUI() {
-  var svcs = ['groq','cerebras','mistral','github','judge0'];
-  svcs.forEach(function(svc) {
-    var val   = usage[svc] || 0;
-    var lim   = LIMITS[svc];
-    var total = lim.total;
-    var pct   = Math.min(val / total, 1);
-    var pp    = Math.round(pct * 100);
-    var color = pct >= lim.CRIT ? 'var(--red)' : pct >= lim.WARN ? 'var(--yellow)' : 'var(--green)';
-    var sc    = pct >= lim.CRIT ? 'crit' : pct >= lim.WARN ? 'warn' : '';
-    var st    = pct >= lim.CRIT ? '🚫 BLOCKED' : pct >= lim.WARN ? '⚠️ WARN' : '✅ OK';
-    var circ  = 62.8; // 2π×10
-    var off   = circ * (1 - pct);
-
-    // Donut ring in strip
-    setEl('dring-' + svc, function(e) {
-      e.style.strokeDashoffset = off;
-      e.setAttribute('stroke', pct >= lim.CRIT ? '#f85149' : pct >= lim.WARN ? '#f5a623' : '#34d878');
-    });
-    setEl('upct-' + svc, function(e) { e.textContent = pp + '%'; e.style.color = color; });
-
-    // Blocked overlay bars
-    setEl('blf-' + svc, function(e) { e.style.width = pp + '%'; e.style.background = color; });
-    setEl('blp-' + svc, function(e) { e.textContent = pp + '%'; e.style.color = color; });
-
-    // Sidebar usage cards
-    setEl('su-pct-' + svc, function(e) { e.textContent = pp + '%'; e.style.color = color; });
-    setEl('su-fill-' + svc, function(e) { e.style.width = pp + '%'; e.style.background = color; });
-    setEl('su-val-' + svc, function(e) {
-      e.textContent = val.toLocaleString() + ' / ' + total.toLocaleString() + ' ' + lim.unit;
-    });
-    setEl('su-live-' + svc, function(e) {
-      e.textContent = lim.live ? '● live' : '○ default';
-      e.style.color = lim.live ? 'var(--green)' : 'var(--muted)';
-    });
-    setEl('sb-usage-' + svc, function(e) {
-      e.className = 'su-card' + (sc ? ' ' + sc : '');
-    });
-
-    // Nav chips
-    setEl('chip-' + svc, function(e) {
-      e.textContent = lim.label + ' ' + pp + '%';
-      e.className = 'chip ' + (sc || 'ok');
-    });
+// ── SWITCHOVER POPUP (critical hit, but fallback available) ──
+function showSwitchoverPopup(deadSvc, nextSvc) {
+  var deadLim = LIMITS[deadSvc];
+  var nextLim = LIMITS[nextSvc];
+  setEl('sw-icon',  function(e){ e.textContent = '🔄'; });
+  setEl('sw-title', function(e){ e.textContent = deadLim.label + ' maxed — switching automatically'; });
+  setEl('sw-msg',   function(e){
+    e.innerHTML = '<b style="color:var(--red)">' + deadLim.label + '</b> hit 96% daily limit. '
+      + 'Switched to <b style="color:var(--green)">' + nextLim.label + '</b> automatically. '
+      + '<span style="color:var(--muted)">Your request will continue without interruption.</span>';
   });
+  // Render chain diagram
+  setEl('sw-chain', function(e){
+    e.innerHTML = LLM_CHAIN.map(function(svc) {
+      if (!LIMITS[svc]) return '';
+      var pct = (usage[svc]||0) / LIMITS[svc].total;
+      var cls = pct >= LIMITS[svc].CRIT ? 'dead' : svc === nextSvc ? 'active' : 'idle';
+      return '<span class="sw-node ' + cls + '">' + LIMITS[svc].label + '</span>'
+           + (svc !== LLM_CHAIN[LLM_CHAIN.length-1] ? '<span class="sw-arrow">→</span>' : '');
+    }).join('');
+  });
+  var p = document.getElementById('switch-popup');
+  if (p) {
+    p.classList.add('show');
+    // Auto-hide after 10 seconds
+    setTimeout(function(){ if(p) p.classList.remove('show'); }, 10000);
+  }
+  // Also add a step card in chat to inform user
+  addStepCard('🔄', 'LLM Switched: ' + deadLim.label + ' → ' + nextLim.label,
+    deadLim.label + ' reached daily limit. Continuing with ' + nextLim.label + ' automatically.', 'heal');
 }
 
-function showWarnToast(svc, pct) {
-  var lim = LIMITS[svc];
-  var rem = Math.round(lim.total * (1 - pct));
-  var el = document.getElementById('warn-body');
-  if (el) el.innerHTML = '<b>' + lim.label + '</b> at <b>' + Math.round(pct*100) + '%</b>. ~' + rem.toLocaleString() + ' ' + lim.unit + ' left. Resets midnight.';
-  var t = document.getElementById('warn-toast'); if (t) t.classList.add('show');
-  setTimeout(function() { var t2=document.getElementById('warn-toast'); if(t2) t2.classList.remove('show'); }, 9000);
-}
-
+// ── HARD BLOCK (all LLMs exhausted) ─────────────────────────
 var countdownTimer = null;
-function showBlocked(svc) {
-  var lim = LIMITS[svc]; var val = usage[svc]||0;
+function showHardBlock() {
   var el = document.getElementById('bl-msg');
-  if (el) el.innerHTML = '<b style="color:var(--red)">' + lim.label + '</b> reached 96% (' + val.toLocaleString() + '/' + lim.total.toLocaleString() + ' ' + lim.unit + '). All requests blocked.';
+  if (el) el.innerHTML = '🚫 <b>All AI services have reached their daily limits.</b><br>'
+    + 'Groq · Cerebras · Gemini · OpenRouter all at 96%+.<br>'
+    + 'Everything resets automatically at midnight. ₹0 spent.';
   refreshUsageUI();
   var ov = document.getElementById('blocked-overlay'); if (ov) ov.classList.add('show');
   if (!countdownTimer) countdownTimer = setInterval(tickCountdown, 1000);
   tickCountdown();
 }
 
+// Legacy alias kept for manualReset button
+function showBlocked(svc) { showHardBlock(); }
+
 function tickCountdown() {
-  var now = new Date(); var mid = new Date(); mid.setHours(24,0,0,0);
+  var now = new Date(), mid = new Date(); mid.setHours(24,0,0,0);
   var d = mid - now;
   var h = Math.floor(d/3600000), m = Math.floor((d%3600000)/60000), s = Math.floor((d%60000)/1000);
-  setEl('bl-cd', function(e) { e.textContent = 'Resets in ' + h + 'h ' + m + 'm ' + s + 's'; });
+  setEl('bl-cd', function(e){ e.textContent = 'Everything resets in ' + h + 'h ' + m + 'm ' + s + 's'; });
 }
 
 function manualReset() {
-  if (!confirm('Reset all usage counters?\nDo this only if it\'s a new day or you have new API keys.')) return;
-  usage = { date: TODAY, groq:0, cerebras:0, mistral:0, github:0, judge0:0 };
+  if (!confirm('Reset all usage counters?\nOnly do this on a new day or after adding new API keys.')) return;
+  usage = { date:TODAY, groq:0, cerebras:0, gemini:0, openrouter:0, mistral:0, github:0, judge0:0 };
+  _warnedSvcs = {}; _critSvcs = {};
+  activeLlm = 'groq'; store.set('active_llm', 'groq');
   saveUsage(); refreshUsageUI();
   var ov = document.getElementById('blocked-overlay'); if (ov) ov.classList.remove('show');
+  var sp = document.getElementById('switch-popup');    if (sp) sp.classList.remove('show');
   if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
+  showAppToast('Usage reset — back to Groq (primary)', 'success');
+}
+
+// ── WARN TOAST ───────────────────────────────────────────────
+function showWarnToast(svc, pct, nextSvc) {
+  var lim = LIMITS[svc];
+  var rem = Math.round(lim.total * (1 - pct));
+  var nextMsg = nextSvc ? ' Will auto-switch to <b>' + LIMITS[nextSvc].label + '</b> at 96%.' : ' <b style="color:var(--red)">No fallback left after this!</b>';
+  var el = document.getElementById('warn-body');
+  if (el) el.innerHTML = '<b>' + lim.label + '</b> at <b>' + Math.round(pct*100) + '%</b> — ~'
+    + rem.toLocaleString() + ' ' + lim.unit + ' remaining.' + nextMsg;
+  var t = document.getElementById('warn-toast'); if (t) t.classList.add('show');
+  setTimeout(function(){ var t2=document.getElementById('warn-toast'); if(t2) t2.classList.remove('show'); }, 10000);
+}
+
+// ── REFRESH ALL UI ELEMENTS ───────────────────────────────────
+function refreshUsageUI() {
+  var allSvcs = ['groq','cerebras','gemini','openrouter','mistral','github','judge0'];
+  allSvcs.forEach(function(svc) {
+    var lim = LIMITS[svc]; if (!lim) return;
+    var val   = usage[svc] || 0;
+    var total = lim.total;
+    var pct   = Math.min(val / total, 1);
+    var pp    = Math.round(pct * 100);
+    var color = pct >= lim.CRIT ? 'var(--red)' : pct >= lim.WARN ? 'var(--yellow)' : 'var(--green)';
+    var sc    = pct >= lim.CRIT ? 'crit' : pct >= lim.WARN ? 'warn' : '';
+    var circ  = 62.8;
+    var off   = circ * (1 - pct);
+
+    // Donut rings
+    setEl('dring-' + svc, function(e) {
+      e.style.strokeDashoffset = off;
+      e.setAttribute('stroke', pct >= lim.CRIT ? '#f85149' : pct >= lim.WARN ? '#f5a623' : '#34d878');
+    });
+    setEl('upct-' + svc, function(e){ e.textContent = pp + '%'; e.style.color = color; });
+
+    // Blocked overlay bars
+    setEl('blf-' + svc, function(e){ e.style.width = pp + '%'; e.style.background = color; });
+    setEl('blp-' + svc, function(e){ e.textContent = pp + '%'; e.style.color = color; });
+
+    // Sidebar usage cards
+    setEl('su-pct-'  + svc, function(e){ e.textContent = pp + '%'; e.style.color = color; });
+    setEl('su-fill-' + svc, function(e){ e.style.width = pp + '%'; e.style.background = color; });
+    setEl('su-val-'  + svc, function(e){ e.textContent = val.toLocaleString() + ' / ' + total.toLocaleString() + ' ' + lim.unit; });
+    setEl('su-live-' + svc, function(e){ e.textContent = lim.live ? '● live' : '○ default'; e.style.color = lim.live ? 'var(--green)' : 'var(--muted)'; });
+    setEl('sb-usage-'+ svc, function(e){ e.className = 'su-card' + (sc ? ' ' + sc : ''); });
+
+    // Nav chips — show active LLM with glow
+    setEl('chip-' + svc, function(e) {
+      e.textContent = lim.label + ' ' + pp + '%';
+      e.className = 'chip ' + (sc || 'ok');
+      if (svc === activeLlm && LLM_CHAIN.indexOf(svc) !== -1) {
+        e.style.boxShadow = '0 0 8px rgba(var(--gRgb),.5)';
+        e.title = lim.label + ' — ACTIVE LLM';
+      } else {
+        e.style.boxShadow = '';
+      }
+    });
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -907,9 +983,6 @@ var lastUserMsg = '';
 var appStats = store.get('stats_today', { sessions:0, files:0, heals:0, saves:0 });
 var history = store.get('chat_history', []);
 var pinnedIds = store.get('pinned_ids', []);
-var apiKeys = store.get('api_keys', {});
-// Safety guard — if localStorage returned null/string/invalid, reset to empty object
-if (!apiKeys || typeof apiKeys !== 'object') apiKeys = {};
 var currentAgentBubble = null;
 var stepContainer = null;
 var sessionStartTime = Date.now();
@@ -948,16 +1021,9 @@ window.addEventListener('load', function() {
   connectWebSocket();
   startSessionTimer();
   restoreChat();
-  pollGitHubLimits();
-  setInterval(pollGitHubLimits, 5 * 60 * 1000); // every 5 min
   if (isBlocked()) {
     var s = Object.keys(LIMITS).find(function(k){ return (usage[k]||0)/LIMITS[k].total >= LIMITS[k].CRIT; });
     if (s) showBlocked(s);
-  }
-  var ghUser = (apiKeys && apiKeys.github_user) ? apiKeys.github_user : null;
-  if (ghUser) {
-    var el = document.getElementById('welcome-user');
-    if (el) { el.textContent = '👋 Welcome back, ' + ghUser; el.style.display = 'block'; }
   }
   // Check files badge
   updateFilesBadge();
@@ -1045,6 +1111,18 @@ function handleMessage(msg) {
   // ── TOKEN COUNTER (live streaming) ─────────────────────────
   if (msg.tokens_used !== undefined) {
     setEl('token-live', function(e){ e.textContent = '~' + msg.tokens_used + ' tokens this response'; });
+  }
+
+  // ── ACTIVE LLM UPDATE from backend ──────────────────────────
+  if (msg.active_llm && msg.active_llm !== activeLlm) {
+    setActiveLlm(msg.active_llm);
+  }
+
+  // ── LLM SWITCHED notification from backend ───────────────
+  if (msg.type === 'llm_switched') {
+    showSwitchoverPopup(msg.from_llm, msg.to_llm);
+    setActiveLlm(msg.to_llm);
+    return;
   }
 
   switch(msg.type) {
@@ -1193,13 +1271,13 @@ function sendMessage() {
   currentFiles = {}; healLog = [];
   updateFilesBadge();
 
-  var keys = getApiKeys();
+  // API keys (Groq, Cerebras, Mistral, Judge0, GitHub) are locked in HF backend.
   ws.send(JSON.stringify({
-    content:    text,
-    user_id:    userId,
-    session_id: sessionId,
+    content:     text,
+    user_id:     userId,
+    session_id:  sessionId,
     github_path: 'users/' + userId + '/projects/' + sessionId,
-    api_keys:   keys
+    active_llm:  activeLlm  // tells backend which LLM to use (auto-switched by frontend)
   }));
 
   appStats.sessions++;
@@ -1554,12 +1632,7 @@ function saveSession(summary) {
   };
   store.set('session_' + sessionId, sess);
 
-  // Persist structure info — backend uses this to write to GitHub:
-  // users/{userId}/sessions/{date}_{sessionId}.json  ← chat log
-  // users/{userId}/projects/{sessionId}/frontend/     ← .jsx files
-  // users/{userId}/projects/{sessionId}/backend/      ← .py files
-  // users/{userId}/projects/{sessionId}/tests/        ← test_*.py files
-  // users/{userId}/projects/{sessionId}/logs/         ← heal_log.json
+  // Persist structure info
   history.push({ id: sessionId, q: chatLog[0] ? chatLog[0].content.slice(0,60) : 'Session', time: formatDate(), pinned: false });
   store.set('chat_history', history);
   renderHistory();
@@ -1706,79 +1779,7 @@ function toggleAcc(hdr) {
 function openModal() { var m=document.getElementById('keys-modal'); if(m) m.classList.add('show'); }
 function closeModal() { var m=document.getElementById('keys-modal'); if(m) m.classList.remove('show'); }
 
-function validateKey(service) {
-  var input = document.getElementById('key-' + service);
-  var statusEl = document.getElementById('status-' + service);
-  if (!input || !statusEl) return;
-  var key = input.value.trim();
-  if (!key) { statusEl.style.color='var(--red)'; statusEl.textContent='No key entered'; return; }
-  statusEl.style.color='var(--muted)'; statusEl.textContent='Testing…';
-
-  // GitHub — supports both classic (ghp_) and fine-grained (github_pat_) tokens
-  if (service === 'github') {
-    var authHeader = key.startsWith('github_pat_') ? 'Bearer ' + key : 'token ' + key;
-    statusEl.style.color='var(--muted)'; statusEl.textContent='Testing GitHub token…';
-    fetch('https://api.github.com/user', {
-      headers: { 'Authorization': authHeader, 'Accept': 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' }
-    })
-      .then(function(r) {
-        if (r.status === 401) throw new Error('Unauthorized — invalid token');
-        if (r.status === 403) throw new Error('Forbidden — check token scopes');
-        return r.json();
-      })
-      .then(function(d) {
-        if (d.login) {
-          var tokenType = key.startsWith('github_pat_') ? 'Fine-grained PAT ✓' : 'Classic token ✓';
-          statusEl.style.color='var(--green)'; statusEl.textContent='✅ Hello, ' + d.login + '! (' + tokenType + ')';
-          store.set('github_user', d.login);
-          store.set('github_auth_header', authHeader);
-          // Safety: ensure apiKeys is always a valid object before writing
-          if (!apiKeys || typeof apiKeys !== 'object') apiKeys = {};
-          apiKeys.github_user = d.login;
-          apiKeys.github_auth_header = authHeader;
-          store.set('api_keys', apiKeys);
-          var wu = document.getElementById('welcome-user');
-          if (wu) { wu.textContent='👋 Welcome, ' + d.login; wu.style.display='block'; }
-        } else {
-          statusEl.style.color='var(--red)'; statusEl.textContent='❌ Invalid — check token format';
-        }
-      }).catch(function(err){
-        statusEl.style.color='var(--red)';
-        statusEl.textContent='❌ ' + (err.message || 'Network error — check internet connection');
-      });
-    return;
-  }
-  // For Groq/Cerebras/Mistral/Judge0 — validation happens via backend
-  statusEl.style.color='var(--yellow)'; statusEl.textContent='⚠ Save keys then use app to validate';
-}
-
-function parseGithubRepo(raw) {
-  // Accepts both "https://github.com/user/repo" and "user/repo"
-  var val = raw.trim();
-  var match = val.match(/github\.com\/([^\/]+\/[^\/]+)/);
-  if (match) return match[1].replace(/\.git$/, '');
-  return val.replace(/\.git$/, '');
-}
-
 function saveKeys() {
-  var rawRepo = document.getElementById('key-github-repo').value.trim();
-  var parsedRepo = parseGithubRepo(rawRepo);
-  // Update the input to show the clean parsed value
-  document.getElementById('key-github-repo').value = parsedRepo;
-
-  apiKeys = {
-    groq:        document.getElementById('key-groq').value.trim(),
-    cerebras:    document.getElementById('key-cerebras').value.trim(),
-    mistral:     document.getElementById('key-mistral').value.trim(),
-    github:      document.getElementById('key-github').value.trim(),
-    github_repo: parsedRepo,
-    judge0:      document.getElementById('key-judge0').value.trim(),
-    github_auth_header: (apiKeys && apiKeys.github_auth_header) || '',
-    github_user: (apiKeys && apiKeys.github_user) || '',
-  };
-  store.set('api_keys', apiKeys);
-
-  // Save backend URL — always reconnect after saving
   var newBackendURL = (document.getElementById('key-backend-url').value || '').trim();
   if (newBackendURL) {
     BACKEND_URL = newBackendURL;
@@ -1795,22 +1796,13 @@ function saveKeys() {
   setTimeout(connectWebSocket, 400);
 
   closeModal();
-  showAppToast('✅ Keys saved! Reconnecting…', 'success');
-  pollGitHubLimits();
+  showAppToast('✅ URL saved! Reconnecting…', 'success');
 }
 
 function loadSavedKeys() {
-  if (apiKeys.groq)        setVal('key-groq',        apiKeys.groq);
-  if (apiKeys.cerebras)    setVal('key-cerebras',    apiKeys.cerebras);
-  if (apiKeys.mistral)     setVal('key-mistral',     apiKeys.mistral);
-  if (apiKeys.github)      setVal('key-github',      apiKeys.github);
-  if (apiKeys.github_repo) setVal('key-github-repo', apiKeys.github_repo);
-  if (apiKeys.judge0)      setVal('key-judge0',      apiKeys.judge0);
   // Always load backend URL — empty string if not set
   setVal('key-backend-url', store.get('backend_url', '') || '');
 }
-
-function getApiKeys() { return apiKeys; }
 
 function testBackendURL() {
   var input = document.getElementById('key-backend-url');
@@ -1829,7 +1821,7 @@ function testBackendURL() {
     .then(function(r) {
       if (r.ok || r.status === 404 || r.status === 422) {
         statusEl.style.color='var(--green)';
-        statusEl.textContent='✅ Backend reachable! Save keys to connect.';
+        statusEl.textContent='✅ Backend reachable! Save to connect.';
         BACKEND_URL = url;
       } else {
         statusEl.style.color='var(--yellow)';
@@ -1863,12 +1855,7 @@ function newSession() {
       + '<div class="welcome-badge">🤖 AI-powered · 100% free · ₹0/month</div>'
       + '<h1>SDLC <em>Agent</em></h1>'
       + '<p>Build full-stack apps, search the web, write & run tests, auto-fix broken code — all saved to GitHub automatically.</p>'
-      + '<div class="suggestions">'
-      + '<button class="sug" onclick="suggest(\'Build a React todo app with FastAPI backend and full tests\')"><div class="sug-icon">🏗️</div><div class="sug-title">Full-stack todo app</div><div class="sug-sub">React + FastAPI + auto-tested</div></button>'
-      + '<button class="sug" onclick="suggest(\'What are the best free LLM APIs available right now?\')"><div class="sug-icon">🌐</div><div class="sug-title">Web search</div><div class="sug-sub">Live info with sources</div></button>'
-      + '<button class="sug" onclick="suggest(\'Create a FastAPI REST API with JWT authentication\')"><div class="sug-icon">⚙️</div><div class="sug-title">Backend API</div><div class="sug-sub">FastAPI + auth + tests</div></button>'
-      + '<button class="sug" onclick="suggest(\'Build a React analytics dashboard with recharts\')"><div class="sug-icon">🎨</div><div class="sug-title">React dashboard</div><div class="sug-sub">Charts, dark UI, responsive</div></button>'
-      + '</div></div>';
+      + '</div>';
   }
   connectWebSocket();
 }
@@ -1969,3 +1956,5 @@ document.addEventListener('click', function(e) {
 </script>
 </body>
 </html>
+
+```
