@@ -371,7 +371,7 @@ body{background:var(--bg);color:var(--text);font-family:'Outfit',sans-serif;heig
 <div id="offline-banner">⚠ No internet connection — reconnecting…</div>
 
 <!-- RECONNECT BANNER -->
-<div id="reconnect-banner" style="display:none">⟳ WebSocket disconnected — reconnecting to backend…</div>
+<div id="reconnect-banner" style="display:none">⟳ Connecting to HuggingFace backend… (if this persists, <a href="https://huggingface.co/spaces/mrbody/sdlc-agent-backend" target="_blank" style="color:var(--yellow);text-decoration:underline">open your Space</a> to wake it up) &nbsp;<button onclick="connectWebSocket()" style="background:var(--yellow);color:#000;border:none;padding:2px 10px;border-radius:4px;cursor:pointer;font-size:10px;font-weight:700;font-family:inherit">Retry Now</button></div>
 
 <!-- APP TOAST -->
 <div id="app-toast"><span id="app-toast-msg"></span><button class="toast-close" onclick="hideAppToast()">✕</button></div>
@@ -431,15 +431,15 @@ body{background:var(--bg);color:var(--text);font-family:'Outfit',sans-serif;heig
         <div class="km-status" id="status-mistral"></div>
       </div>
       <div class="km-grp">
-        <label>GitHub Token <span style="color:var(--green)">· 5,000 calls/hr</span></label>
-        <div class="km-row"><input class="km-input" id="key-github" type="password" placeholder="ghp_…"/><button class="km-btn" onclick="validateKey('github')">Test</button></div>
-        <div class="km-hint">github.com/settings/tokens · Saves all sessions + code to your repo</div>
+        <label>GitHub Token (Fine-grained PAT) <span style="color:var(--green)">· 5,000 calls/hr</span></label>
+        <div class="km-row"><input class="km-input" id="key-github" type="password" placeholder="github_pat_…"/><button class="km-btn" onclick="validateKey('github')">Test</button></div>
+        <div class="km-hint">github.com → Settings → Developer Settings → Fine-grained tokens → Generate · Needs <strong>Contents: Read &amp; Write</strong></div>
         <div class="km-status" id="status-github"></div>
       </div>
       <div class="km-grp">
-        <label>GitHub Repo</label>
-        <input class="km-input" id="key-github-repo" type="text" placeholder="username/sdlc-agent-storage"/>
-        <div class="km-hint">Files saved under users/{user_id}/projects/{session_id}/</div>
+        <label>GitHub Repo <span style="color:var(--muted)">· where sessions are saved</span></label>
+        <input class="km-input" id="key-github-repo" type="text" placeholder="https://github.com/username/sdlc-agent-storage"/>
+        <div class="km-hint">Paste the full GitHub repo URL · Files saved under users/{user_id}/sessions/</div>
       </div>
       <div class="km-grp">
         <label>Judge0 RapidAPI Key <span style="color:var(--green)">· 100 req/day</span></label>
@@ -750,11 +750,18 @@ function updateLiveLimits(rl) {
 }
 
 // Poll GitHub rate limit directly (frontend can do this with CORS-friendly endpoint)
+function getGithubAuthHeader(key) {
+  // Fine-grained PATs (github_pat_) need Bearer, classic (ghp_) use token
+  if (!key) return '';
+  return key.startsWith('github_pat_') ? 'Bearer ' + key : 'token ' + key;
+}
+
 function pollGitHubLimits() {
   var keys = getApiKeys();
   if (!keys.github) return;
+  var authHeader = getGithubAuthHeader(keys.github);
   fetch('https://api.github.com/rate_limit', {
-    headers: { 'Authorization': 'token ' + keys.github, 'Accept': 'application/vnd.github.v3+json' }
+    headers: { 'Authorization': authHeader, 'Accept': 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' }
   }).then(function(r) { return r.json(); }).then(function(d) {
     if (d.rate) {
       LIMITS.github.total = d.rate.limit;
@@ -1119,7 +1126,18 @@ function sendMessage() {
     showBlocked(bl); return;
   }
   if (!ws || ws.readyState !== WebSocket.OPEN) {
-    showAppToast('Not connected — check your HuggingFace Space', 'error'); return;
+    // Show a clear, helpful error message instead of cryptic toast
+    addBubble('agent',
+      '⚠️ Backend not connected yet.\n\n' +
+      'Possible reasons:\n' +
+      '1. HuggingFace Space is still starting (takes ~60 sec on first load)\n' +
+      '2. Space URL may be wrong — currently set to: ' + BACKEND_URL + '\n' +
+      '3. The Space may be sleeping — visit it directly to wake it up\n\n' +
+      '🔗 Open your Space: https://huggingface.co/spaces/mrbody/sdlc-agent-backend\n\n' +
+      'Wait 30 seconds and try again. The banner at top will turn green when connected.'
+    );
+    setProcessing(false);
+    return;
   }
 
   var welcome = document.getElementById('welcome');
@@ -1655,39 +1673,68 @@ function validateKey(service) {
   if (!key) { statusEl.style.color='var(--red)'; statusEl.textContent='No key entered'; return; }
   statusEl.style.color='var(--muted)'; statusEl.textContent='Testing…';
 
-  // GitHub — direct CORS-friendly endpoint
+  // GitHub — supports both classic (ghp_) and fine-grained (github_pat_) tokens
   if (service === 'github') {
-    fetch('https://api.github.com/user', { headers: { 'Authorization': 'token ' + key } })
-      .then(function(r) { return r.json(); })
+    var authHeader = key.startsWith('github_pat_') ? 'Bearer ' + key : 'token ' + key;
+    statusEl.style.color='var(--muted)'; statusEl.textContent='Testing GitHub token…';
+    fetch('https://api.github.com/user', {
+      headers: { 'Authorization': authHeader, 'Accept': 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' }
+    })
+      .then(function(r) {
+        if (r.status === 401) throw new Error('Unauthorized — invalid token');
+        if (r.status === 403) throw new Error('Forbidden — check token scopes');
+        return r.json();
+      })
       .then(function(d) {
         if (d.login) {
-          statusEl.style.color='var(--green)'; statusEl.textContent='✅ Valid — Hello, ' + d.login + '!';
+          var tokenType = key.startsWith('github_pat_') ? 'Fine-grained PAT ✓' : 'Classic token ✓';
+          statusEl.style.color='var(--green)'; statusEl.textContent='✅ Hello, ' + d.login + '! (' + tokenType + ')';
           store.set('github_user', d.login);
+          store.set('github_auth_header', authHeader);
           apiKeys.github_user = d.login;
+          apiKeys.github_auth_header = authHeader;
           var wu = document.getElementById('welcome-user');
           if (wu) { wu.textContent='👋 Welcome, ' + d.login; wu.style.display='block'; }
         } else {
-          statusEl.style.color='var(--red)'; statusEl.textContent='❌ Invalid key';
+          statusEl.style.color='var(--red)'; statusEl.textContent='❌ Invalid — check token format';
         }
-      }).catch(function(){ statusEl.style.color='var(--red)'; statusEl.textContent='❌ Network error'; });
+      }).catch(function(err){
+        statusEl.style.color='var(--red)';
+        statusEl.textContent='❌ ' + (err.message || 'Network error — check internet connection');
+      });
     return;
   }
   // For Groq/Cerebras/Mistral/Judge0 — validation happens via backend
   statusEl.style.color='var(--yellow)'; statusEl.textContent='⚠ Save keys then use app to validate';
 }
 
+function parseGithubRepo(raw) {
+  // Accepts both "https://github.com/user/repo" and "user/repo"
+  var val = raw.trim();
+  var match = val.match(/github\.com\/([^\/]+\/[^\/]+)/);
+  if (match) return match[1].replace(/\.git$/, '');
+  return val.replace(/\.git$/, '');
+}
+
 function saveKeys() {
+  var rawRepo = document.getElementById('key-github-repo').value.trim();
+  var parsedRepo = parseGithubRepo(rawRepo);
+  // Update the input to show the clean parsed value
+  document.getElementById('key-github-repo').value = parsedRepo;
+
   apiKeys = {
     groq:        document.getElementById('key-groq').value.trim(),
     cerebras:    document.getElementById('key-cerebras').value.trim(),
     mistral:     document.getElementById('key-mistral').value.trim(),
     github:      document.getElementById('key-github').value.trim(),
-    github_repo: document.getElementById('key-github-repo').value.trim(),
+    github_repo: parsedRepo,
     judge0:      document.getElementById('key-judge0').value.trim(),
+    github_auth_header: apiKeys.github_auth_header || '',
+    github_user: apiKeys.github_user || '',
   };
   store.set('api_keys', apiKeys);
   closeModal();
-  showAppToast('API keys saved!', 'success');
+  showAppToast('✅ Keys saved! GitHub repo: ' + (parsedRepo || 'not set'), 'success');
   pollGitHubLimits();
 }
 
