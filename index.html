@@ -122,10 +122,10 @@ body{background:var(--bg);color:var(--text);font-family:'Outfit',sans-serif;heig
 .km-footer{text-align:center;font-size:9px;color:var(--muted);margin-top:8px;font-family:'JetBrains Mono',monospace;}
 
 /* ── COMMAND PALETTE Ctrl+K ── */
-#cmd-palette{display:none;position:fixed;top:18%;left:50%;transform:translateX(-50%);z-index:9500;width:580px;max-width:95vw;}
-#cmd-palette.show{display:block;animation:cmdIn .2s ease;}
-@keyframes cmdIn{from{opacity:0;transform:translateX(-50%)translateY(-12px)}to{opacity:1;transform:translateX(-50%)translateY(0)}}
-.cmd-box{background:var(--surface);border:1px solid var(--border2);border-radius:16px;box-shadow:0 24px 80px rgba(0,0,0,.7);overflow:hidden;}
+#cmd-palette{display:none;position:fixed;inset:0;z-index:9500;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);align-items:flex-start;justify-content:center;padding-top:15vh;}
+#cmd-palette.show{display:flex;animation:cmdIn .2s ease;}
+@keyframes cmdIn{from{opacity:0;transform:translateY(-12px)}to{opacity:1;transform:translateY(0)}}
+.cmd-box{background:var(--surface);border:1px solid var(--border2);border-radius:16px;box-shadow:0 24px 80px rgba(0,0,0,.7);overflow:hidden;width:580px;max-width:95vw;}
 .cmd-top{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--border);}
 .cmd-icon-wrap{color:var(--muted);font-size:16px;}
 #cmd-input{flex:1;background:none;border:none;outline:none;color:var(--text);font-family:'Outfit',sans-serif;font-size:15px;font-weight:500;}
@@ -371,7 +371,7 @@ body{background:var(--bg);color:var(--text);font-family:'Outfit',sans-serif;heig
 <div id="offline-banner">⚠ No internet connection — reconnecting…</div>
 
 <!-- RECONNECT BANNER -->
-<div id="reconnect-banner" style="display:none">⟳ Connecting to HuggingFace backend… (if this persists, <a href="https://huggingface.co/spaces/mrbody/sdlc-agent-backend" target="_blank" style="color:var(--yellow);text-decoration:underline">open your Space</a> to wake it up) &nbsp;<button onclick="connectWebSocket()" style="background:var(--yellow);color:#000;border:none;padding:2px 10px;border-radius:4px;cursor:pointer;font-size:10px;font-weight:700;font-family:inherit">Retry Now</button></div>
+<div id="reconnect-banner" style="display:none">⟳ Connecting to backend… <span id="rb-link"></span>&nbsp;<button onclick="connectWebSocket()" style="background:var(--yellow);color:#000;border:none;padding:2px 10px;border-radius:4px;cursor:pointer;font-size:10px;font-weight:700;font-family:inherit">Retry Now</button></div>
 
 <!-- APP TOAST -->
 <div id="app-toast"><span id="app-toast-msg"></span><button class="toast-close" onclick="hideAppToast()">✕</button></div>
@@ -412,6 +412,18 @@ body{background:var(--bg);color:var(--text);font-family:'Outfit',sans-serif;heig
       <button class="km-close" onclick="closeModal()">✕</button>
     </div>
     <div class="km-form">
+      <!-- ★ BACKEND URL — most important, shown first -->
+      <div class="km-grp" style="border:2px solid var(--accent);border-radius:10px;padding:12px;background:rgba(var(--aRgb),.07)">
+        <label style="color:var(--accent);font-size:11px">🔗 HUGGINGFACE BACKEND URL <span style="color:var(--red)">· Required first</span></label>
+        <div class="km-row">
+          <input class="km-input" id="key-backend-url" type="text"
+            placeholder="wss://YOUR-USERNAME-sdlc-agent-backend.hf.space/ws"
+            style="font-size:11px"/>
+          <button class="km-btn" onclick="testBackendURL()">Test</button>
+        </div>
+        <div class="km-hint">Get from: huggingface.co/spaces → your Space → copy URL → replace https:// with wss:// → add /ws at end</div>
+        <div class="km-status" id="status-backend-url"></div>
+      </div>
       <div class="km-grp">
         <label>Groq API Key <span style="color:var(--green)">· 14,400 req/day</span></label>
         <div class="km-row"><input class="km-input" id="key-groq" type="password" placeholder="gsk_…"/><button class="km-btn" onclick="validateKey('groq')">Test</button></div>
@@ -447,19 +459,20 @@ body{background:var(--bg);color:var(--text);font-family:'Outfit',sans-serif;heig
         <div class="km-hint">rapidapi.com · Runs generated tests in sandbox</div>
         <div class="km-status" id="status-judge0"></div>
       </div>
+
       <button class="km-save" onclick="saveKeys()">💾 Save All Keys</button>
       <div class="km-footer">🔒 Keys stored in localStorage · Never uploaded anywhere except your own backend</div>
     </div>
   </div>
 </div>
 
-<!-- COMMAND PALETTE -->
-<div id="cmd-palette">
+<!-- COMMAND PALETTE — fullscreen overlay so clicking outside closes it -->
+<div id="cmd-palette" onclick="if(event.target===this)closeCmd()">
   <div class="cmd-box">
     <div class="cmd-top">
       <span class="cmd-icon-wrap">⌘</span>
       <input id="cmd-input" placeholder="Search commands, history…" oninput="filterCmd(this.value)" onkeydown="cmdKey(event)"/>
-      <span class="cmd-esc">ESC</span>
+      <span class="cmd-esc" onclick="closeCmd()" style="cursor:pointer" title="Close (ESC)">ESC</span>
     </div>
     <div class="cmd-results" id="cmd-results"></div>
   </div>
@@ -905,8 +918,23 @@ var chatLog = []; // For persistence + export
 // Restore chat from previous session
 var savedChat = store.get('current_chat', []);
 
-// !! UPDATE with your HuggingFace username !!
-var BACKEND_URL = 'wss://mrbody-sdlc-agent-backend.hf.space/ws';
+// ══════════════════════════════════════════════════
+//  BACKEND URL — set by user in API Keys modal
+//  Format: wss://YOUR-USERNAME-sdlc-agent-backend.hf.space/ws
+//  To change: click 🔑 Keys → paste your HF Space URL → Save
+// ══════════════════════════════════════════════════
+var BACKEND_URL = store.get('backend_url', '') || '';
+// Update reconnect banner link dynamically using the stored URL
+(function updateReconnectLink() {
+  var rb = document.getElementById('rb-link');
+  if (!rb) return;
+  if (BACKEND_URL) {
+    var spaceUrl = BACKEND_URL.replace(/^wss:\/\//, 'https://').replace(/\/ws.*$/, '');
+    rb.innerHTML = '(<a href="' + spaceUrl + '" target="_blank" style="color:var(--yellow);text-decoration:underline">open Space to wake it up</a>)';
+  } else {
+    rb.innerHTML = '(⚠️ No backend URL set — click 🔑 Keys and enter your HuggingFace Space URL)';
+  }
+})();
 var reconnectDelay = 3000;
 var MAX_CHARS = 2000;
 
@@ -963,6 +991,12 @@ function pad(n) { return n < 10 ? '0'+n : n; }
 // ═══════════════════════════════════════════════════════════════
 function connectWebSocket() {
   if (ws && ws.readyState === WebSocket.OPEN) return;
+  // Guard: don't attempt connection if URL is empty
+  if (!BACKEND_URL || BACKEND_URL.trim() === '') {
+    updateConnStatus(false);
+    setEl('reconnect-banner', function(e){ e.classList.remove('show'); });
+    return;
+  }
   try {
     ws = new WebSocket(BACKEND_URL + '/' + sessionId);
     ws.onopen = function() {
@@ -1129,14 +1163,17 @@ function sendMessage() {
   }
   if (!ws || ws.readyState !== WebSocket.OPEN) {
     // Show a clear, helpful error message instead of cryptic toast
+    var _spaceLink = BACKEND_URL
+      ? BACKEND_URL.replace(/^wss:\/\//, 'https://').replace(/\/ws.*$/, '')
+      : '';
     addBubble('agent',
       '⚠️ Backend not connected yet.\n\n' +
       'Possible reasons:\n' +
-      '1. HuggingFace Space is still starting (takes ~60 sec on first load)\n' +
-      '2. Space URL may be wrong — currently set to: ' + BACKEND_URL + '\n' +
-      '3. The Space may be sleeping — visit it directly to wake it up\n\n' +
-      '🔗 Open your Space: https://huggingface.co/spaces/mrbody/sdlc-agent-backend\n\n' +
-      'Wait 30 seconds and try again. The banner at top will turn green when connected.'
+      '1. HuggingFace Space is still waking up — wait 30 seconds and retry\n' +
+      '2. Backend URL not set or wrong — current: ' + (BACKEND_URL || '❌ NOT SET') + '\n' +
+      '3. Space may be sleeping — open it directly to wake it up\n\n' +
+      (_spaceLink ? '🔗 Open your Space: ' + _spaceLink + '\n\n' : '👉 Click 🔑 Keys → paste your HuggingFace Space wss:// URL → Save\n\n') +
+      'The green dot (top-left) turns green when connected.'
     );
     setProcessing(false);
     return;
@@ -1631,13 +1668,15 @@ function renderCmdResults(q) {
 }
 
 function cmdKey(e) {
+  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeCmd(); return; }
   if (e.key === 'Enter') {
+    e.preventDefault();
     var active = document.querySelector('#cmd-results .cmd-item.active');
     if (active) active.click();
     else closeCmd();
   }
-  if (e.key === 'ArrowDown') { cmdSelected++; renderCmdResults(document.getElementById('cmd-input').value); }
-  if (e.key === 'ArrowUp') { cmdSelected=Math.max(0,cmdSelected-1); renderCmdResults(document.getElementById('cmd-input').value); }
+  if (e.key === 'ArrowDown') { e.preventDefault(); cmdSelected++; renderCmdResults(document.getElementById('cmd-input').value); }
+  if (e.key === 'ArrowUp') { e.preventDefault(); cmdSelected=Math.max(0,cmdSelected-1); renderCmdResults(document.getElementById('cmd-input').value); }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1738,21 +1777,70 @@ function saveKeys() {
     github_user: (apiKeys && apiKeys.github_user) || '',
   };
   store.set('api_keys', apiKeys);
+
+  // Save backend URL — always reconnect after saving
+  var newBackendURL = (document.getElementById('key-backend-url').value || '').trim();
+  if (newBackendURL) {
+    BACKEND_URL = newBackendURL;
+    store.set('backend_url', BACKEND_URL);
+    // Update reconnect banner link dynamically
+    var rb = document.getElementById('rb-link');
+    if (rb) {
+      var spaceUrl = BACKEND_URL.replace(/^wss:\/\//, 'https://').replace(/\/ws.*$/, '');
+      rb.innerHTML = '(<a href="' + spaceUrl + '" target="_blank" style="color:var(--yellow);text-decoration:underline">open Space to wake it up</a>)';
+    }
+  }
+  // Always close existing WS and reconnect fresh
+  if (ws) { try { ws.close(); } catch(e) {} ws = null; }
+  setTimeout(connectWebSocket, 400);
+
   closeModal();
-  showAppToast('✅ Keys saved! GitHub repo: ' + (parsedRepo || 'not set'), 'success');
+  showAppToast('✅ Keys saved! Reconnecting…', 'success');
   pollGitHubLimits();
 }
 
 function loadSavedKeys() {
-  if (apiKeys.groq)        setVal('key-groq', apiKeys.groq);
-  if (apiKeys.cerebras)    setVal('key-cerebras', apiKeys.cerebras);
-  if (apiKeys.mistral)     setVal('key-mistral', apiKeys.mistral);
-  if (apiKeys.github)      setVal('key-github', apiKeys.github);
+  if (apiKeys.groq)        setVal('key-groq',        apiKeys.groq);
+  if (apiKeys.cerebras)    setVal('key-cerebras',    apiKeys.cerebras);
+  if (apiKeys.mistral)     setVal('key-mistral',     apiKeys.mistral);
+  if (apiKeys.github)      setVal('key-github',      apiKeys.github);
   if (apiKeys.github_repo) setVal('key-github-repo', apiKeys.github_repo);
-  if (apiKeys.judge0)      setVal('key-judge0', apiKeys.judge0);
+  if (apiKeys.judge0)      setVal('key-judge0',      apiKeys.judge0);
+  // Always load backend URL — empty string if not set
+  setVal('key-backend-url', store.get('backend_url', '') || '');
 }
 
 function getApiKeys() { return apiKeys; }
+
+function testBackendURL() {
+  var input = document.getElementById('key-backend-url');
+  var statusEl = document.getElementById('status-backend-url');
+  var url = (input.value || '').trim();
+  if (!url) { statusEl.style.color='var(--red)'; statusEl.textContent='❌ Enter a URL first'; return; }
+
+  // Convert wss:// to https:// or ws:// to http:// for health check
+  var httpURL = url.replace(/^wss:\/\//, 'https://').replace(/^ws:\/\//, 'http://').replace(/\/ws$/, '').replace(/\/ws\/.*$/, '');
+  statusEl.style.color='var(--muted)'; statusEl.textContent='Testing connection…';
+
+  var _ctrl = new AbortController();
+  var _timer = setTimeout(function(){ _ctrl.abort(); }, 8000);
+  fetch(httpURL + '/', { signal: _ctrl.signal })
+    .finally(function(){ clearTimeout(_timer); })
+    .then(function(r) {
+      if (r.ok || r.status === 404 || r.status === 422) {
+        statusEl.style.color='var(--green)';
+        statusEl.textContent='✅ Backend reachable! Save keys to connect.';
+        BACKEND_URL = url;
+      } else {
+        statusEl.style.color='var(--yellow)';
+        statusEl.textContent='⚠ Backend responded with status ' + r.status + ' — may still work, save and try.';
+      }
+    })
+    .catch(function(err) {
+      statusEl.style.color='var(--red)';
+      statusEl.textContent='❌ Cannot reach backend — is your HuggingFace Space running? Error: ' + (err.message || 'Network error');
+    });
+}
 
 // ═══════════════════════════════════════════════════════════════
 //  NEW SESSION
