@@ -895,6 +895,8 @@ var appStats = store.get('stats_today', { sessions:0, files:0, heals:0, saves:0 
 var history = store.get('chat_history', []);
 var pinnedIds = store.get('pinned_ids', []);
 var apiKeys = store.get('api_keys', {});
+// Safety guard — if localStorage returned null/string/invalid, reset to empty object
+if (!apiKeys || typeof apiKeys !== 'object') apiKeys = {};
 var currentAgentBubble = null;
 var stepContainer = null;
 var sessionStartTime = Date.now();
@@ -924,7 +926,7 @@ window.addEventListener('load', function() {
     var s = Object.keys(LIMITS).find(function(k){ return (usage[k]||0)/LIMITS[k].total >= LIMITS[k].CRIT; });
     if (s) showBlocked(s);
   }
-  var ghUser = apiKeys.github_user;
+  var ghUser = (apiKeys && apiKeys.github_user) ? apiKeys.github_user : null;
   if (ghUser) {
     var el = document.getElementById('welcome-user');
     if (el) { el.textContent = '👋 Welcome back, ' + ghUser; el.style.display = 'block'; }
@@ -1691,8 +1693,11 @@ function validateKey(service) {
           statusEl.style.color='var(--green)'; statusEl.textContent='✅ Hello, ' + d.login + '! (' + tokenType + ')';
           store.set('github_user', d.login);
           store.set('github_auth_header', authHeader);
+          // Safety: ensure apiKeys is always a valid object before writing
+          if (!apiKeys || typeof apiKeys !== 'object') apiKeys = {};
           apiKeys.github_user = d.login;
           apiKeys.github_auth_header = authHeader;
+          store.set('api_keys', apiKeys);
           var wu = document.getElementById('welcome-user');
           if (wu) { wu.textContent='👋 Welcome, ' + d.login; wu.style.display='block'; }
         } else {
@@ -1729,8 +1734,8 @@ function saveKeys() {
     github:      document.getElementById('key-github').value.trim(),
     github_repo: parsedRepo,
     judge0:      document.getElementById('key-judge0').value.trim(),
-    github_auth_header: apiKeys.github_auth_header || '',
-    github_user: apiKeys.github_user || '',
+    github_auth_header: (apiKeys && apiKeys.github_auth_header) || '',
+    github_user: (apiKeys && apiKeys.github_user) || '',
   };
   store.set('api_keys', apiKeys);
   closeModal();
