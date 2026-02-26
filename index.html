@@ -51,21 +51,21 @@ body{background:var(--bg);color:var(--text);font-family:'Outfit',sans-serif;heig
 .sidebar-body{flex:1;overflow-y:auto;}
 .new-session-btn{margin:10px;padding:12px;border:none;border-radius:10px;background:var(--accent);color:#fff;font-family:'Outfit',sans-serif;font-weight:700;font-size:13px;cursor:pointer;}
 
-/* ACCORDIONS (Sidebar Tabs) */
+/* ACCORDIONS */
 .acc-section{border-top:1px solid var(--border);}
 .acc-hdr{display:flex;align-items:center;gap:8px;padding:12px 16px;cursor:pointer;font-size:12px;font-weight:700;color:var(--text2);user-select:none;}
 .acc-hdr:hover{color:var(--text);background:var(--s2);}
 .acc-body{display:none;padding:6px 16px 16px;}
 .acc-hdr.open + .acc-body{display:block;}
 
-/* SIDEBAR USAGE CARDS */
+/* USAGE CARDS */
 .su-card{background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;}
 .su-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;font-size:11px;font-weight:700;color:var(--text);}
 .su-track{height:5px;background:var(--s3);border-radius:3px;overflow:hidden;margin-bottom:4px;}
 .su-fill{height:100%;border-radius:3px;background:var(--green);transition:width .4s;}
 .su-detail{font-size:9px;color:var(--muted);font-family:'JetBrains Mono',monospace;}
 
-/* HISTORY ITEMS */
+/* HISTORY */
 .h-item{padding:10px 16px;cursor:pointer;border-bottom:1px solid var(--border);transition:0.2s;}
 .h-item:hover, .h-item.active{background:var(--s2);}
 .h-q{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
@@ -88,12 +88,13 @@ body{background:var(--bg);color:var(--text);font-family:'Outfit',sans-serif;heig
 .msg.user .bubble{background:var(--accent);color:#fff;border-radius:16px 6px 16px 16px;}
 .msg.agent .bubble{background:var(--surface);border:1px solid var(--border); width: 100%;}
 
-/* 6-STEP AGENTIC LOOP UI */
+/* 6-STEP AGENTIC LOOP */
 .step-container{display:flex;flex-direction:column;gap:8px;margin-bottom:12px;}
 .step-card{display:flex;align-items:center;gap:10px;background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;}
 .step-card.active{border-color:var(--accent);background:var(--s3);}
 .step-card.done{border-color:var(--green);opacity:0.8;}
 .step-card.error{border-color:var(--red);}
+.step-card.heal{border-color:var(--yellow);}
 .step-num{width:22px;height:22px;border-radius:6px;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;font-family:'JetBrains Mono',monospace;flex-shrink:0;}
 .step-card.done .step-num{background:var(--green);}
 .step-card.error .step-num{background:var(--red);}
@@ -120,17 +121,22 @@ body{background:var(--bg);color:var(--text);font-family:'Outfit',sans-serif;heig
 #user-input{flex:1;background:none;border:none;outline:none;color:var(--text);font-family:'Outfit',sans-serif;font-size:14px;resize:none;max-height:150px;line-height:1.5;}
 .send-btn{width:40px;height:40px;border-radius:10px;background:var(--accent);border:none;color:#fff;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;}
 .send-btn:hover{opacity:0.9;}
+.send-btn:disabled{opacity:0.4;cursor:not-allowed;}
+
+/* Connection status text */
+#conn-status-text{font-size:10px;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-left:8px;}
 </style>
 </head>
 <body>
 
-<div id="reconnect-banner">⟳ Connecting to AI Backend…</div>
+<div id="reconnect-banner">⟳ <span id="reconnect-msg">Waking up AI Backend — this can take 20-30 seconds on first load…</span></div>
 <div id="app-toast"><span id="app-toast-msg"></span></div>
 
 <nav class="nav">
   <div class="logo">
     <div class="logo-dot" id="conn-dot"></div>
     <div class="logo-name">SDLC <em>Agent</em></div>
+    <span id="conn-status-text">connecting…</span>
   </div>
   <div class="nav-r">
     <button class="btn-nav" onclick="toggleTheme()">🌓 Theme</button>
@@ -141,7 +147,6 @@ body{background:var(--bg);color:var(--text);font-family:'Outfit',sans-serif;heig
 <div class="layout">
   <aside class="sidebar">
     <button class="new-session-btn" onclick="newSession()">＋ New Session</button>
-    
     <div class="sidebar-body">
       <div class="acc-section">
         <div class="acc-hdr open" onclick="toggleAcc(this)">💬 Chat History ▾</div>
@@ -149,7 +154,6 @@ body{background:var(--bg);color:var(--text);font-family:'Outfit',sans-serif;heig
           <div style="padding:16px;color:var(--muted);font-size:11px;text-align:center;">No history yet</div>
         </div>
       </div>
-
       <div class="acc-section">
         <div class="acc-hdr" onclick="toggleAcc(this)">📊 API Usage Stats ▾</div>
         <div class="acc-body">
@@ -166,13 +170,12 @@ body{background:var(--bg);color:var(--text);font-family:'Outfit',sans-serif;heig
       <div style="margin:auto;text-align:center;max-width:500px;opacity:0.7;" id="welcome-screen">
         <h1 style="font-size:32px;margin-bottom:10px;">How can I help you build?</h1>
         <p style="font-size:14px;color:var(--text2);">I can generate full-stack code, execute backend scripts, and search the web for documentation.</p>
-        </div>
+      </div>
     </div>
-    
     <div class="input-area">
       <div class="input-box">
-        <textarea id="user-input" rows="1" placeholder="Describe your architecture, or ask a question..." onkeydown="handleKey(event)" oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight, 150)+'px';"></textarea>
-        <button class="send-btn" id="send-btn" onclick="sendMessage()">➤</button>
+        <textarea id="user-input" rows="1" placeholder="Describe your architecture, or ask a question…" onkeydown="handleKey(event)" oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,150)+'px';"></textarea>
+        <button class="send-btn" id="send-btn" onclick="sendMessage()" disabled title="Waiting for backend…">➤</button>
       </div>
       <div style="font-size:10px;color:var(--muted);text-align:center;margin-top:8px;font-family:'JetBrains Mono',monospace;">Agentic 6-Step Loop Enabled</div>
     </div>
@@ -181,136 +184,167 @@ body{background:var(--bg);color:var(--text);font-family:'Outfit',sans-serif;heig
 
 <script>
 // ==========================================
-// 1. CONFIGURATION & STATE
+// CONFIGURATION
 // ==========================================
-// REPLACE WITH YOUR BACKEND URL
-const BACKEND_URL = 'wss://aneshteja1-sdlc-agent-backend.hf.space/ws';
+// ⚠️  Change this to your actual HF Space URL
+const HF_SPACE_HTTP  = 'https://aneshteja1-sdlc-agent-backend.hf.space';
+const HF_SPACE_WS    = 'wss://aneshteja1-sdlc-agent-backend.hf.space';
+
 let ws = null;
-let sessionId = Math.random().toString(36).substring(2,10);
+let wsReady = false;
+let reconnectAttempts = 0;
+let reconnectTimer = null;
 let isProcessing = false;
-let activeTurnId = null; 
+let activeTurnId = null;
 let currentTurnText = '';
 let chatLog = [];
 let chatHistory = JSON.parse(localStorage.getItem('chat_history') || '[]');
+let sessionId = Math.random().toString(36).substring(2,10);
 
 window.onload = () => {
     renderHistory();
-    connectWebSocket();
+    wakeAndConnect();   // FIX: ping HTTP first, THEN open WebSocket
 };
 
-function toggleTheme() {
-    const cur = document.documentElement.getAttribute('data-theme');
-    document.documentElement.setAttribute('data-theme', cur === 'dark' ? 'light' : 'dark');
-}
-
-function toggleAcc(hdr) {
-    hdr.classList.toggle('open');
-}
-
-function showToast(msg, type='info') {
-    const t = document.getElementById('app-toast');
-    t.innerHTML = msg;
-    t.style.background = type === 'error' ? 'var(--red)' : 'var(--green)';
-    t.className = 'show';
-    setTimeout(() => t.className = '', 3000);
+// ==========================================
+// FIX 1 – WAKE HF SPACE BEFORE WS CONNECT
+// The most common reason WS fails is that the
+// HF Space is sleeping. We hit the HTTP health
+// endpoint first, which wakes it, then connect.
+// ==========================================
+async function wakeAndConnect() {
+    setStatus('waking', 'Waking up backend…');
+    try {
+        // Simple GET to the / health route on the FastAPI server
+        const res = await fetch(`${HF_SPACE_HTTP}/`, { method: 'GET', mode: 'cors' });
+        if (res.ok) {
+            setStatus('connecting', 'Backend awake — connecting…');
+        }
+    } catch (e) {
+        // It might still be starting; we'll try WS anyway
+        setStatus('connecting', 'Trying connection…');
+    }
+    connectWebSocket();
 }
 
 // ==========================================
-// 2. WEBSOCKET CONNECTION
+// FIX 2 – EXPONENTIAL BACK-OFF RECONNECT
+// Instead of hammering every 3s (which floods
+// the logs and doesn't help with cold starts),
+// we wait 2s → 4s → 8s → 16s → 30s max.
 // ==========================================
 function connectWebSocket() {
-    if (ws) ws.close();
-    ws = new WebSocket(`${BACKEND_URL}/${sessionId}`);
-    
+    if (ws) { try { ws.close(); } catch(_){} }
+    wsReady = false;
+    document.getElementById('send-btn').disabled = true;
+
+    ws = new WebSocket(`${HF_SPACE_WS}/ws/${sessionId}`);
+
     ws.onopen = () => {
-        document.getElementById('conn-dot').style.background = 'var(--green)';
-        document.getElementById('conn-dot').style.boxShadow = '0 0 10px rgba(52,216,120,.5)';
+        wsReady = true;
+        reconnectAttempts = 0;
+        document.getElementById('send-btn').disabled = false;
+        setStatus('connected', 'Connected');
         document.getElementById('reconnect-banner').style.display = 'none';
     };
-    
-    ws.onclose = () => {
-        document.getElementById('conn-dot').style.background = 'var(--red)';
-        document.getElementById('conn-dot').style.boxShadow = '0 0 10px rgba(248,81,73,.5)';
+
+    ws.onclose = (e) => {
+        wsReady = false;
+        document.getElementById('send-btn').disabled = true;
+        if (isProcessing) {
+            finalizeTurn('⚠️ Connection lost mid-response. Please try again.');
+        }
+
+        const delay = Math.min(2000 * Math.pow(2, reconnectAttempts), 30000);
+        reconnectAttempts++;
+        const secs = Math.round(delay / 1000);
+
+        setStatus('disconnected', `Disconnected — retrying in ${secs}s…`);
         document.getElementById('reconnect-banner').style.display = 'block';
-        setTimeout(connectWebSocket, 3000);
+        document.getElementById('reconnect-msg').textContent =
+            `Connection lost. Retrying in ${secs}s (attempt ${reconnectAttempts})…`;
+
+        clearTimeout(reconnectTimer);
+        reconnectTimer = setTimeout(connectWebSocket, delay);
+    };
+
+    ws.onerror = () => {
+        // onclose fires right after, so no extra handling needed
     };
 
     ws.onmessage = (e) => {
-        const msg = JSON.parse(e.data);
-        handleMessage(msg);
+        try {
+            const msg = JSON.parse(e.data);
+            handleMessage(msg);
+        } catch(err) {
+            console.error('Bad message from server:', e.data);
+        }
     };
 }
 
+function setStatus(state, label) {
+    const dot  = document.getElementById('conn-dot');
+    const text = document.getElementById('conn-status-text');
+    text.textContent = label;
+    const colors = {
+        connected:    ['var(--green)',  'rgba(52,216,120,.5)'],
+        disconnected: ['var(--red)',    'rgba(248,81,73,.5)'],
+        waking:       ['var(--yellow)', 'rgba(245,166,35,.5)'],
+        connecting:   ['var(--yellow)', 'rgba(245,166,35,.5)'],
+    };
+    const [bg, shadow] = colors[state] || colors.disconnected;
+    dot.style.background  = bg;
+    dot.style.boxShadow   = `0 0 10px ${shadow}`;
+}
+
 // ==========================================
-// 3. MESSAGE HANDLING (STRICT ISOLATION)
+// MESSAGE HANDLING
 // ==========================================
 function handleKey(e) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        sendMessage();
-    }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
 }
 
 function sendMessage() {
     const input = document.getElementById('user-input');
     const text = input.value.trim();
-    if (!text || isProcessing) return;
+    if (!text || isProcessing || !wsReady) {
+        if (!wsReady) showToast('Still connecting… please wait a moment.', 'warn');
+        return;
+    }
 
     const welcome = document.getElementById('welcome-screen');
     if (welcome) welcome.style.display = 'none';
 
-    // 1. Draw User Bubble
     addBubble('user', text);
     chatLog.push({ role: 'user', content: text });
 
-    // 2. Reset State for AI Turn
     input.value = '';
     input.style.height = 'auto';
     isProcessing = true;
     document.getElementById('send-btn').textContent = '⏳';
-    
-    // 3. Generate strict Turn ID to prevent overlapping
+    document.getElementById('send-btn').disabled = true;
+
     activeTurnId = 'turn-' + Date.now();
     currentTurnText = '';
 
-    // 4. Send to Backend
-    ws.send(JSON.stringify({
-        content: text,
-        session_id: sessionId
-    }));
-    
+    ws.send(JSON.stringify({ content: text, session_id: sessionId }));
     saveSessionToHistory();
 }
 
 function handleMessage(msg) {
-    // Update Hidden Sidebar Stats
     if (msg.usage) updateUsageStats(msg.usage);
-
     switch(msg.type) {
-        case 'thinking': 
-            ensureAgentBubble(); 
-            break;
-        case 'step': 
-            addStepCard(msg.step, msg.title, msg.message, msg.state); 
-            break;
-        case 'code_ready': 
-            addCodeBlock(msg.file, msg.code, msg.language); 
-            break;
-        case 'answer_part': 
-            appendToMarkdown(msg.content); 
-            break;
-        case 'complete': 
-            finalizeTurn(msg.message); 
-            break;
-        case 'error': 
-            showToast(msg.message, 'error');
-            finalizeTurn();
-            break;
+        case 'thinking':     ensureAgentBubble();                                       break;
+        case 'step':         addStepCard(msg.step, msg.title, msg.message, msg.state); break;
+        case 'code_ready':   addCodeBlock(msg.file, msg.code, msg.language);           break;
+        case 'answer_part':  appendToMarkdown(msg.content);                            break;
+        case 'complete':     finalizeTurn(msg.message);                                break;
+        case 'error':        showToast(msg.message, 'error'); finalizeTurn();          break;
     }
 }
 
 // ==========================================
-// 4. UI RENDERERS (THE 6-STEP VISUALIZER)
+// UI RENDERERS
 // ==========================================
 function addBubble(role, text) {
     const msgs = document.getElementById('messages');
@@ -318,8 +352,7 @@ function addBubble(role, text) {
     div.className = `msg ${role}`;
     div.innerHTML = `
         <div class="avatar ${role}">${role === 'agent' ? '🤖' : '👤'}</div>
-        <div class="bubble-wrap"><div class="bubble">${escHtml(text)}</div></div>
-    `;
+        <div class="bubble-wrap"><div class="bubble">${escHtml(text)}</div></div>`;
     msgs.appendChild(div);
     msgs.scrollTop = msgs.scrollHeight;
 }
@@ -331,7 +364,6 @@ function ensureAgentBubble() {
         el = document.createElement('div');
         el.className = 'msg agent';
         el.id = activeTurnId;
-        // Contains separate containers for Steps and final Markdown to prevent mixing
         el.innerHTML = `
             <div class="avatar agent">🤖</div>
             <div class="bubble-wrap">
@@ -348,23 +380,19 @@ function ensureAgentBubble() {
 function addStepCard(num, title, message, state) {
     const bubble = ensureAgentBubble();
     const stepCont = bubble.querySelector('.step-container');
-    
-    // Check if step already exists (for updates)
     let card = document.getElementById(`step-${activeTurnId}-${num}`);
     if (!card) {
         card = document.createElement('div');
         card.id = `step-${activeTurnId}-${num}`;
         stepCont.appendChild(card);
     }
-    
     card.className = `step-card ${state}`;
     card.innerHTML = `
         <div class="step-num">${num}</div>
         <div class="step-body">
             <div class="step-title">${title}</div>
             <div class="step-msg">${escHtml(message)}</div>
-        </div>
-    `;
+        </div>`;
     document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
 }
 
@@ -373,14 +401,11 @@ function addCodeBlock(filename, code, lang) {
     const stepCont = bubble.querySelector('.step-container');
     const block = document.createElement('div');
     block.className = 'code-block';
-    
     let highlighted = escHtml(code);
     try { highlighted = hljs.highlightAuto(code).value; } catch(e){}
-
     block.innerHTML = `
         <div class="code-hdr"><span>📄 ${filename}</span></div>
-        <div class="code-body"><pre><code>${highlighted}</code></pre></div>
-    `;
+        <div class="code-body"><pre><code>${highlighted}</code></pre></div>`;
     stepCont.appendChild(block);
     document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
 }
@@ -395,18 +420,17 @@ function appendToMarkdown(text) {
 
 function finalizeTurn(finalText) {
     isProcessing = false;
-    document.getElementById('send-btn').textContent = '➤';
+    const btn = document.getElementById('send-btn');
+    btn.textContent = '➤';
+    btn.disabled = !wsReady;
     if (finalText) appendToMarkdown("\n\n" + finalText);
-    
     chatLog.push({ role: 'agent', content: currentTurnText });
     saveSessionToHistory();
-    
-    // Detach Turn ID so next message gets a fresh bubble
     activeTurnId = null;
 }
 
 // ==========================================
-// 5. SESSION & SIDEBAR MANAGEMENT
+// SESSION & SIDEBAR
 // ==========================================
 function newSession() {
     sessionId = Math.random().toString(36).substring(2,10);
@@ -423,12 +447,9 @@ function newSession() {
 
 function saveSessionToHistory() {
     localStorage.setItem(`session_${sessionId}`, JSON.stringify(chatLog));
-    
-    // Deduplicate history list
     chatHistory = chatHistory.filter(h => h.id !== sessionId);
-    const title = chatLog[0] ? chatLog[0].content.substring(0, 30) + '...' : 'New Chat';
-    
-    chatHistory.push({ id: sessionId, title: title, time: new Date().toLocaleTimeString() });
+    const title = chatLog[0] ? chatLog[0].content.substring(0, 30) + '…' : 'New Chat';
+    chatHistory.push({ id: sessionId, title, time: new Date().toLocaleTimeString() });
     localStorage.setItem('chat_history', JSON.stringify(chatHistory));
     renderHistory();
 }
@@ -436,11 +457,9 @@ function saveSessionToHistory() {
 function loadSession(id) {
     const saved = JSON.parse(localStorage.getItem(`session_${id}`));
     if (!saved) return;
-    
     sessionId = id;
     chatLog = saved;
     activeTurnId = null;
-    
     document.getElementById('messages').innerHTML = '';
     chatLog.forEach(m => {
         activeTurnId = 'turn-' + Math.random();
@@ -448,8 +467,7 @@ function loadSession(id) {
         if (m.role === 'user') addBubble('user', m.content);
         else appendToMarkdown(m.content);
     });
-    activeTurnId = null; // Reset for next interaction
-    
+    activeTurnId = null;
     connectWebSocket();
     renderHistory();
 }
@@ -464,8 +482,7 @@ function renderHistory() {
         <div class="h-item ${h.id === sessionId ? 'active' : ''}" onclick="loadSession('${h.id}')">
             <div class="h-q">${escHtml(h.title)}</div>
             <div class="h-meta">${h.time}</div>
-        </div>
-    `).join('');
+        </div>`).join('');
 }
 
 function updateUsageStats(usage) {
@@ -476,17 +493,31 @@ function updateUsageStats(usage) {
     }
 }
 
+function toggleTheme() {
+    const cur = document.documentElement.getAttribute('data-theme');
+    document.documentElement.setAttribute('data-theme', cur === 'dark' ? 'light' : 'dark');
+}
+function toggleAcc(hdr) { hdr.classList.toggle('open'); }
+
+function showToast(msg, type='info') {
+    const t = document.getElementById('app-toast');
+    t.innerHTML = msg;
+    t.style.background = type === 'error' ? 'var(--red)' : type === 'warn' ? 'var(--yellow)' : 'var(--green)';
+    t.className = 'show';
+    setTimeout(() => t.className = '', 3500);
+}
+
 // ==========================================
-// 6. UTILS
+// UTILS
 // ==========================================
 function escHtml(t){ return String(t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-function renderMarkdown(text){
+function renderMarkdown(text) {
     let s = escHtml(text);
     s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
     s = s.replace(/### (.+)/g, '<h3>$1</h3>');
-    s = s.replace(/## (.+)/g, '<h2>$1</h2>');
-    s = s.replace(/# (.+)/g, '<h1>$1</h1>');
+    s = s.replace(/## (.+)/g,  '<h2>$1</h2>');
+    s = s.replace(/# (.+)/g,   '<h1>$1</h1>');
     s = s.replace(/\n\n/g, '</p><p>');
     return '<p>' + s + '</p>';
 }
